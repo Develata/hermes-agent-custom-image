@@ -6,10 +6,11 @@ on:
       - main
   workflow_dispatch:
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: "0 3 * * *"
 
 env:
   IMAGE_NAME: hermes-agent-custom-image
+  UPSTREAM_IMAGE: nousresearch/hermes-agent:latest
 
 jobs:
   build:
@@ -57,19 +58,61 @@ jobs:
         shell: bash
         run: echo "IMAGE_DATE=$(date +%F)" >> "$GITHUB_ENV"
 
+      - name: Check upstream digest
+        id: upstream
+        shell: bash
+        run: |
+          upstream_digest="$(docker buildx imagetools inspect "${UPSTREAM_IMAGE}" --format '{{.Manifest.Digest}}')"
+          upstream_tag="upstream-${upstream_digest#sha256:}"
+          custom_image="ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}"
+
+          echo "digest=${upstream_digest}" >> "$GITHUB_OUTPUT"
+          echo "tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
+          echo "custom_image=${custom_image}" >> "$GITHUB_OUTPUT"
+
+          if [ "${GITHUB_EVENT_NAME}" != "schedule" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=${GITHUB_EVENT_NAME}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if docker manifest inspect "${custom_image}:${upstream_tag}" >/dev/null 2>&1; then
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "reason=upstream digest already built" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "reason=new upstream digest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Print build decision
+        shell: bash
+        run: |
+          echo "Upstream image: ${UPSTREAM_IMAGE}"
+          echo "Upstream digest: ${{ steps.upstream.outputs.digest }}"
+          echo "Digest tag: ${{ steps.upstream.outputs.tag }}"
+          echo "Should build: ${{ steps.upstream.outputs.should_build }}"
+          echo "Reason: ${{ steps.upstream.outputs.reason }}"
+
       - name: Build Docker image
+        if: steps.upstream.outputs.should_build == 'true'
         shell: bash
         run: |
           docker build --pull \
-            -t ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:latest \
-            -t ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:${IMAGE_DATE} \
+            --build-arg UPSTREAM_IMAGE="${UPSTREAM_IMAGE}" \
+            --label org.opencontainers.image.base.name="${UPSTREAM_IMAGE}" \
+            --label org.opencontainers.image.base.digest="${{ steps.upstream.outputs.digest }}" \
+            -t "${{ steps.upstream.outputs.custom_image }}:latest" \
+            -t "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}" \
+            -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}" \
             .
 
       - name: Push Docker image
+        if: steps.upstream.outputs.should_build == 'true'
         shell: bash
         run: |
-          docker push ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:latest
-          docker push ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:${IMAGE_DATE}
+          docker push "${{ steps.upstream.outputs.custom_image }}:latest"
+          docker push "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}"
+          docker push "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}"
 
       - name: Log out from GitHub Container Registry
         if: always()

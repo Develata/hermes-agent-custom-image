@@ -109,17 +109,20 @@ docker compose up -d
 
 ### 自动构建
 
-GitHub Actions 会在以下场景构建并推送镜像到 GHCR：
+GitHub Actions 会在以下场景检查或构建镜像：
 
 - push 到 `main`
 - 手动 `workflow_dispatch`
-- 每周一 UTC 03:00 定时构建
+- 每天 UTC 03:00 检查上游镜像 digest
 
-每次构建会同时推送：
+定时任务只在上游 `nousresearch/hermes-agent:latest` digest 变化时构建并推送。push 和手动触发会直接构建。
+
+每次实际构建会同时推送：
 
 ```text
 latest
 YYYY-MM-DD
+upstream-<sha256>
 ```
 
 ### 默认用户
@@ -243,17 +246,20 @@ docker compose up -d
 
 ### Automated builds
 
-GitHub Actions builds and pushes the image to GHCR on:
+GitHub Actions checks or builds the image on:
 
 - push to `main`
 - manual `workflow_dispatch`
-- weekly schedule, Monday 03:00 UTC
+- daily upstream digest check at 03:00 UTC
 
-Each build pushes:
+Scheduled runs only build and push when the digest of `nousresearch/hermes-agent:latest` changes. Push and manual runs build directly.
+
+Each actual build pushes:
 
 ```text
 latest
 YYYY-MM-DD
+upstream-<sha256>
 ```
 
 ### Default user
