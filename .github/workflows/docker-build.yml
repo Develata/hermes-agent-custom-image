@@ -26,11 +26,28 @@ jobs:
           persist-credentials: false
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        id: ghcr-login
+        uses: docker/login-action@v4
+        continue-on-error: true
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retry GHCR login
+        if: steps.ghcr-login.outcome != 'success'
+        shell: bash
+        env:
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin; then
+              exit 0
+            fi
+            sleep $((attempt * 15))
+          done
+          exit 1
 
       - name: Set lowercase image owner
         shell: bash
@@ -53,3 +70,8 @@ jobs:
         run: |
           docker push ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:latest
           docker push ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}:${IMAGE_DATE}
+
+      - name: Log out from GitHub Container Registry
+        if: always()
+        shell: bash
+        run: docker logout ghcr.io || true
