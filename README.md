@@ -1,6 +1,6 @@
 # hermes-agent-custom-image
 
-This repository builds a thin custom Docker image based on the upstream Hermes Agent image, with GitHub CLI installed.
+This repository builds a thin custom Docker image based on the upstream Hermes Agent image, with GitHub CLI and a small set of daily-use CLI tools installed.
 
 It does not fork or vendor the upstream Hermes source. It only rebuilds from the upstream image and adds a small package layer.
 
@@ -16,11 +16,24 @@ The base image can be overridden at build time with `UPSTREAM_IMAGE`.
 
 ```text
 gh
+python3-pip
+jq
+unzip
+fd-find
+fzf
+bat
+eza
+tree
+htop
+tmux
+vim
 ```
 
-The image installs `gh` from the official GitHub CLI apt repository. `ca-certificates` is installed as a minimal prerequisite for HTTPS apt sources.
+The image installs `gh` from the official GitHub CLI apt repository. Other packages come from the base Debian apt repositories. `ca-certificates` is installed as a minimal prerequisite for HTTPS apt sources.
 
-The current upstream Hermes image is Debian-based and already includes `curl`, so this repository does not add `curl` as a custom package.
+The current upstream Hermes image is Debian-based and already includes `git`, `curl`, `wget`, `ca-certificates`, build tools, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`, so this repository does not add those as custom packages.
+
+On Debian, `fd-find` may install the binary as `fdfind`, and `bat` may install the binary as `batcat`. The Dockerfile creates compatibility symlinks at `/usr/local/bin/fd` and `/usr/local/bin/bat` when needed.
 
 ## Image
 
@@ -53,7 +66,7 @@ docker run --rm hermes-agent-custom-image:latest gh --version
 Optional shell check:
 
 ```bash
-docker run --rm hermes-agent-custom-image:latest sh -lc "whoami && command -v gh"
+docker run --rm hermes-agent-custom-image:latest sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza"
 ```
 
 If the upstream image has `bash`:
