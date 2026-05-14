@@ -53,9 +53,16 @@ tree
 htop
 tmux
 vim
+codex
 ```
 
 `gh` 来自 GitHub CLI 官方 apt 源；其他包来自基础 Debian apt 仓库。`ca-certificates` 作为 HTTPS apt 源的最小前置依赖安装。
+
+Codex CLI 通过上游镜像已有的 npm 安装：
+
+```bash
+npm install -g @openai/codex
+```
 
 当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、构建工具、Python、Node.js、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
 
@@ -76,7 +83,7 @@ docker build --pull -t hermes-agent-custom-image:latest .
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza"
+  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza && command -v codex && codex --version"
 ```
 
 进入 shell：
@@ -190,9 +197,16 @@ tree
 htop
 tmux
 vim
+codex
 ```
 
 `gh` is installed from the official GitHub CLI apt repository. Other packages are installed from the base Debian apt repositories. `ca-certificates` is installed as the minimal prerequisite for HTTPS apt sources.
+
+Codex CLI is installed via npm, which is already available in the upstream image:
+
+```bash
+npm install -g @openai/codex
+```
 
 The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, build tools, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
 
@@ -213,7 +227,7 @@ Verify the core tools:
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza"
+  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza && command -v codex && codex --version"
 ```
 
 Open a shell:

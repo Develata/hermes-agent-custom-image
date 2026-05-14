@@ -35,3 +35,6 @@ RUN apt-get update \
        fi \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @openai/codex \
+    && npm cache clean --force
