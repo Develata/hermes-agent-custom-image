@@ -38,5 +38,7 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
-    npm install -g @openai/codex; \
+    npm install -g \
+        @openai/codex \
+        @colbymchenry/codegraph;\
     npm cache clean --force
