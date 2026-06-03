@@ -69,6 +69,13 @@ RUN set -eux; \
     rustup --version; \
     rustc --version; \
     cargo --version; \
+    printf '%s\n' \
+        'export RUSTUP_HOME=/usr/local/rustup' \
+        'export CARGO_HOME=/usr/local/cargo' \
+        'case ":$PATH:" in *:/usr/local/cargo/bin:*) ;; *) export PATH="/usr/local/cargo/bin:$PATH" ;; esac' \
+        'export CARGO_TERM_COLOR=always' \
+        > /etc/profile.d/rust.sh; \
+    chmod 0644 /etc/profile.d/rust.sh; \
     rm -f /tmp/rustup-init.sh; \
     chmod -R a+w "${RUSTUP_HOME}" "${CARGO_HOME}"
 
