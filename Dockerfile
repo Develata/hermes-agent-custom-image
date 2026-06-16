@@ -77,7 +77,18 @@ RUN set -eux; \
         > /etc/profile.d/rust.sh; \
     chmod 0644 /etc/profile.d/rust.sh; \
     rm -f /tmp/rustup-init.sh; \
-    chmod -R a+w "${RUSTUP_HOME}" "${CARGO_HOME}"
+    if id hermes >/dev/null 2>&1; then \
+        chown -R hermes:hermes "${RUSTUP_HOME}" "${CARGO_HOME}"; \
+    fi; \
+    chmod -R u+rwX,go+rX,go-w "${RUSTUP_HOME}" "${CARGO_HOME}"
+
+# Feishu/Lark optional gateway deps are baked into the Hermes venv because
+# Feishu is configured as Develata's secondary gateway channel. Runtime
+# `uv pip install` into /opt/hermes/.venv is not durable across image rebuilds.
+RUN set -eux; \
+    uv pip install --python /opt/hermes/.venv/bin/python \
+        'lark-oapi==1.5.3' \
+        'qrcode==7.4.2'
 
 RUN set -eux; \
     npm install -g \
