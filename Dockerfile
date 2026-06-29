@@ -95,5 +95,6 @@ RUN set -eux; \
 RUN set -eux; \
     npm install -g \
         @openai/codex \
-        @colbymchenry/codegraph; \
+        @colbymchenry/codegraph \
+        @tencent-qqmail/agently-cli; \
     npm cache clean --force
