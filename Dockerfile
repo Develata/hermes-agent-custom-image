@@ -15,6 +15,8 @@ USER root
 # - unzip: archive handling for user-supplied artifacts
 # - rclone: OpenList/WebDAV transfer helper; use copy/sync by default,
 #   not FUSE mount
+# - Docker Compose CLI plugin: render/validate Compose files with
+#   `docker compose config`; no Docker daemon or socket is included
 # - build-essential/pkg-config/libssl-dev: common native dependencies for
 #   small Rust crates that compile C/OpenSSL bindings
 # - Rust minimal stable toolchain: local smoke tests and small scripts only;
@@ -24,6 +26,8 @@ USER root
 #
 # Deliberately not included:
 # - python3-pip: prefer uv / the Hermes venv; avoid PEP 668 friction
+# - Docker daemon / dockerd / Docker socket: the long-running Hermes gateway
+#   container should not hold host-level container-control privileges
 # - rust-analyzer/nightly/extra targets: install per project only if needed
 # - fuse3: OpenList should be accessed by explicit rclone copy/sync; mounting
 #   needs Docker runtime /dev/fuse + privileges and is not the default
@@ -49,6 +53,30 @@ RUN set -eux; \
 
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
+
+ARG DOCKER_COMPOSE_VERSION=v5.3.0
+
+# Install only the Docker Compose CLI plugin. This enables syntax/env
+# validation such as `docker compose config` inside Hermes, but does not add a
+# Docker daemon or host Docker socket access.
+RUN set -eux; \
+    case "$(uname -s)-$(uname -m)" in \
+        Linux-x86_64) compose_platform=linux-x86_64 ;; \
+        Linux-aarch64) compose_platform=linux-aarch64 ;; \
+        *) echo "unsupported Docker Compose plugin platform: $(uname -s)-$(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    install -m 0755 -d /usr/local/lib/docker/cli-plugins; \
+    compose_url="https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-${compose_platform}"; \
+    curl -fsSL "${compose_url}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+    curl -fsSL "${compose_url}.sha256" \
+        -o /tmp/docker-compose.sha256; \
+    expected_sha256="$(awk '{print $1}' /tmp/docker-compose.sha256)"; \
+    actual_sha256="$(sha256sum /usr/local/lib/docker/cli-plugins/docker-compose | awk '{print $1}')"; \
+    test "${expected_sha256}" = "${actual_sha256}"; \
+    chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose; \
+    docker compose version; \
+    rm -f /tmp/docker-compose.sha256
 
 # Minimal Rust toolchain for local small scripts and smoke tests.
 # For repository-level validation, prefer GitHub Actions with cargo fmt,

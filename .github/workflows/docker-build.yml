@@ -106,6 +106,13 @@ jobs:
             -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}" \
             .
 
+      - name: Smoke test Docker image
+        if: steps.upstream.outputs.should_build == 'true'
+        shell: bash
+        run: |
+          docker run --rm "${{ steps.upstream.outputs.custom_image }}:latest" \
+            sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
+
       - name: Push Docker image
         if: steps.upstream.outputs.should_build == 'true'
         shell: bash

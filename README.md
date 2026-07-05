@@ -10,11 +10,11 @@
 
 一个极小的 Hermes Agent 自定义 Docker 镜像包装仓库。
 
-本仓库不 fork、不复制、不改写上游 Hermes Agent 源码。它只做一件事：以官方上游镜像为基础，额外安装常用命令行工具，然后发布为自己的 GHCR 镜像。
+本仓库不 fork、不复制、不改写上游 Hermes Agent 源码。它只做一件事：以官方上游镜像为基础，额外安装 Develata 常用的命令行工具，然后发布为自己的 GHCR 镜像。
 
 > 上游项目：[`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent)
 >
-> 本仓库尊重并依赖上游 Hermes Agent 的工作；所有 Hermes Agent 本体能力、入口脚本和基础运行环境均来自上游。本仓库仅维护额外 apt 包这一层。
+> 本仓库尊重并依赖上游 Hermes Agent 的工作；所有 Hermes Agent 本体能力、入口脚本和基础运行环境均来自上游。本仓库只维护额外工具层。
 
 ### 镜像
 
@@ -42,36 +42,36 @@ docker build --pull \
 
 ```text
 gh
-python3-pip
 jq
 unzip
-fd-find
-fzf
-bat
-eza
-tree
-htop
-tmux
-vim
+rclone
+sshpass
+Docker Compose CLI plugin
+Rust stable toolchain + rustfmt + clippy
+build-essential / pkg-config / libssl-dev
 codex
+codegraph
+agently-cli
+Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
-`gh` 来自 GitHub CLI 官方 apt 源；其他包来自基础 Debian apt 仓库。`ca-certificates` 作为 HTTPS apt 源的最小前置依赖安装。
+`gh` 来自 GitHub CLI 官方 apt 源；`jq`、`unzip`、`rclone`、`sshpass` 和基础编译依赖来自基础 Debian apt 仓库。
 
-Codex CLI 通过上游镜像已有的 npm 安装：
-
-```bash
-npm install -g @openai/codex
-```
-
-当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、构建工具、Python、Node.js、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
-
-Debian 下 `fd-find` 可能安装为 `fdfind`，`bat` 可能安装为 `batcat`。Dockerfile 会在需要时创建兼容命令：
+Docker Compose 只安装 CLI plugin 到：
 
 ```text
-/usr/local/bin/fd
-/usr/local/bin/bat
+/usr/local/lib/docker/cli-plugins/docker-compose
 ```
+
+用途是在 Hermes 容器内运行 `docker compose config` 这类 Compose 文件渲染/校验命令。镜像不包含 Docker daemon，也不默认挂载宿主机 Docker socket。
+
+Codex / CodeGraph / agently-cli 通过上游镜像已有的 npm 安装：
+
+```bash
+npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+```
+
+当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
 
 ### 本地构建与验证
 
@@ -83,7 +83,7 @@ docker build --pull -t hermes-agent-custom-image:latest .
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza && command -v codex && codex --version"
+  sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
 ```
 
 进入 shell：
@@ -154,11 +154,11 @@ docker image inspect nousresearch/hermes-agent:latest --format '{{.Config.User}}
 
 A tiny custom Docker image wrapper for Hermes Agent.
 
-This repository does not fork, vendor, or modify the upstream Hermes Agent source code. It only rebuilds from the official upstream image, installs a small set of daily-use CLI tools, and publishes the result as a GHCR image.
+This repository does not fork, vendor, or modify the upstream Hermes Agent source code. It only rebuilds from the official upstream image, installs Develata's daily-use CLI tools, and publishes the result as a GHCR image.
 
 > Upstream project: [`NousResearch/hermes-agent`](https://github.com/NousResearch/hermes-agent)
 >
-> This repository respects and depends on the upstream Hermes Agent project. The Hermes Agent runtime, entrypoint, and base environment come from upstream. This repository only maintains the extra apt package layer.
+> This repository respects and depends on the upstream Hermes Agent project. The Hermes Agent runtime, entrypoint, and base environment come from upstream. This repository only maintains the extra tooling layer.
 
 ### Image
 
@@ -186,36 +186,36 @@ docker build --pull \
 
 ```text
 gh
-python3-pip
 jq
 unzip
-fd-find
-fzf
-bat
-eza
-tree
-htop
-tmux
-vim
+rclone
+sshpass
+Docker Compose CLI plugin
+Rust stable toolchain + rustfmt + clippy
+build-essential / pkg-config / libssl-dev
 codex
+codegraph
+agently-cli
+Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
-`gh` is installed from the official GitHub CLI apt repository. Other packages are installed from the base Debian apt repositories. `ca-certificates` is installed as the minimal prerequisite for HTTPS apt sources.
+`gh` is installed from the official GitHub CLI apt repository. `jq`, `unzip`, `rclone`, `sshpass`, and native build dependencies are installed from the base Debian apt repositories.
 
-Codex CLI is installed via npm, which is already available in the upstream image:
-
-```bash
-npm install -g @openai/codex
-```
-
-The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, build tools, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
-
-On Debian, `fd-find` may install the binary as `fdfind`, and `bat` may install the binary as `batcat`. The Dockerfile creates compatibility commands when needed:
+Docker Compose is installed only as the CLI plugin at:
 
 ```text
-/usr/local/bin/fd
-/usr/local/bin/bat
+/usr/local/lib/docker/cli-plugins/docker-compose
 ```
+
+This lets Hermes run Compose render/validation commands such as `docker compose config` inside the container. The image does not include a Docker daemon and does not mount the host Docker socket by default.
+
+Codex / CodeGraph / agently-cli are installed via npm, which is already available in the upstream image:
+
+```bash
+npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+```
+
+The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
 
 ### Build and verify
 
@@ -227,7 +227,7 @@ Verify the core tools:
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc "whoami && command -v gh && command -v pip3 && command -v jq && command -v fd && command -v bat && command -v eza && command -v codex && codex --version"
+  sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
 ```
 
 Open a shell:
