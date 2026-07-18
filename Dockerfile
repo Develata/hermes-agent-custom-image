@@ -113,12 +113,18 @@ RUN set -eux; \
     chmod -R u+rwX,go+rX,go-w "${RUSTUP_HOME}" "${CARGO_HOME}"
 
 # Feishu/Lark optional gateway deps are baked into the Hermes venv because
-# Feishu is configured as Develata's secondary gateway channel. Runtime
-# `uv pip install` into /opt/hermes/.venv is not durable across image rebuilds.
+# Feishu is configured as Develata's secondary gateway channel. Derive the
+# exact requirements from the upstream pyproject instead of duplicating its
+# pins here: an upstream adapter/SDK contract change must update both atomically.
 RUN set -eux; \
+    /opt/hermes/.venv/bin/python -c \
+        'import pathlib, tomllib; p = pathlib.Path("/opt/hermes/pyproject.toml"); d = tomllib.loads(p.read_text()); print("\n".join(d["project"]["optional-dependencies"]["feishu"]))' \
+        > /tmp/hermes-feishu-requirements.txt; \
+    grep -Eq '^lark-oapi([<>=!~].*)?$' /tmp/hermes-feishu-requirements.txt; \
+    grep -Eq '^qrcode([<>=!~].*)?$' /tmp/hermes-feishu-requirements.txt; \
     uv pip install --python /opt/hermes/.venv/bin/python \
-        'lark-oapi==1.5.3' \
-        'qrcode==7.4.2'
+        -r /tmp/hermes-feishu-requirements.txt; \
+    rm -f /tmp/hermes-feishu-requirements.txt
 
 RUN set -eux; \
     npm install -g \
@@ -126,3 +132,5 @@ RUN set -eux; \
         @colbymchenry/codegraph \
         @tencent-qqmail/agently-cli; \
     npm cache clean --force
+
+COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke

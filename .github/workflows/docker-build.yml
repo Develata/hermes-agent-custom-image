@@ -54,20 +54,26 @@ jobs:
         shell: bash
         run: echo "IMAGE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
-      - name: Set image date
+      - name: Set build metadata
         shell: bash
-        run: echo "IMAGE_DATE=$(date +%F)" >> "$GITHUB_ENV"
+        run: |
+          echo "IMAGE_DATE=$(date -u +%F)" >> "$GITHUB_ENV"
+          echo "IMAGE_CREATED=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+          echo "CUSTOM_REVISION=${GITHUB_SHA:0:12}" >> "$GITHUB_ENV"
 
       - name: Check upstream digest
         id: upstream
         shell: bash
         run: |
           upstream_digest="$(docker buildx imagetools inspect "${UPSTREAM_IMAGE}" --format '{{.Manifest.Digest}}')"
-          upstream_tag="upstream-${upstream_digest#sha256:}"
+          digest_hex="${upstream_digest#sha256:}"
+          upstream_tag="upstream-${digest_hex}"
+          immutable_tag="build-${CUSTOM_REVISION}-upstream-${digest_hex:0:12}"
           custom_image="ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}"
 
           echo "digest=${upstream_digest}" >> "$GITHUB_OUTPUT"
           echo "tag=${upstream_tag}" >> "$GITHUB_OUTPUT"
+          echo "immutable_tag=${immutable_tag}" >> "$GITHUB_OUTPUT"
           echo "custom_image=${custom_image}" >> "$GITHUB_OUTPUT"
 
           if [ "${GITHUB_EVENT_NAME}" != "schedule" ]; then
@@ -90,6 +96,7 @@ jobs:
           echo "Upstream image: ${UPSTREAM_IMAGE}"
           echo "Upstream digest: ${{ steps.upstream.outputs.digest }}"
           echo "Digest tag: ${{ steps.upstream.outputs.tag }}"
+          echo "Immutable tag: ${{ steps.upstream.outputs.immutable_tag }}"
           echo "Should build: ${{ steps.upstream.outputs.should_build }}"
           echo "Reason: ${{ steps.upstream.outputs.reason }}"
 
@@ -97,13 +104,18 @@ jobs:
         if: steps.upstream.outputs.should_build == 'true'
         shell: bash
         run: |
+          base_ref="${UPSTREAM_IMAGE}@${{ steps.upstream.outputs.digest }}"
           docker build --pull \
-            --build-arg UPSTREAM_IMAGE="${UPSTREAM_IMAGE}" \
+            --build-arg UPSTREAM_IMAGE="${base_ref}" \
+            --label org.opencontainers.image.source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label org.opencontainers.image.revision="${GITHUB_SHA}" \
+            --label org.opencontainers.image.created="${IMAGE_CREATED}" \
             --label org.opencontainers.image.base.name="${UPSTREAM_IMAGE}" \
             --label org.opencontainers.image.base.digest="${{ steps.upstream.outputs.digest }}" \
             -t "${{ steps.upstream.outputs.custom_image }}:latest" \
             -t "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}" \
             -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}" \
+            -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}" \
             .
 
       - name: Smoke test Docker image
@@ -111,7 +123,18 @@ jobs:
         shell: bash
         run: |
           docker run --rm "${{ steps.upstream.outputs.custom_image }}:latest" \
-            sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
+            sh -lc hermes-custom-image-smoke
+
+      - name: Verify image provenance labels
+        if: steps.upstream.outputs.should_build == 'true'
+        shell: bash
+        run: |
+          image="${{ steps.upstream.outputs.custom_image }}:latest"
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "${image}")" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${image}")" = "${GITHUB_SHA}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.created" }}' "${image}")" = "${IMAGE_CREATED}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "${image}")" = "${UPSTREAM_IMAGE}"
+          test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.digest" }}' "${image}")" = "${{ steps.upstream.outputs.digest }}"
 
       - name: Push Docker image
         if: steps.upstream.outputs.should_build == 'true'
@@ -120,6 +143,7 @@ jobs:
           docker push "${{ steps.upstream.outputs.custom_image }}:latest"
           docker push "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}"
           docker push "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}"
+          docker push "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}"
 
       - name: Log out from GitHub Container Registry
         if: always()

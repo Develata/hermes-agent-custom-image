@@ -21,6 +21,8 @@
 ```text
 ghcr.io/develata/hermes-agent-custom-image:latest
 ghcr.io/develata/hermes-agent-custom-image:YYYY-MM-DD
+ghcr.io/develata/hermes-agent-custom-image:upstream-<sha256>
+ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>
 ```
 
 基础镜像：
@@ -71,6 +73,8 @@ Codex / CodeGraph / agently-cli 通过上游镜像已有的 npm 安装：
 npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
 ```
 
+Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `/opt/hermes/pyproject.toml` 的 `project.optional-dependencies.feishu`，把同一组 requirements 安装进 Hermes venv；若上游移除该 extra、缺少 `lark-oapi` / `qrcode`，或 SDK 不再满足 adapter 的 `extra_ua_tags` contract，构建 smoke 会 fail closed。
+
 当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
 
 ### 本地构建与验证
@@ -83,7 +87,7 @@ docker build --pull -t hermes-agent-custom-image:latest .
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
+  sh -lc hermes-custom-image-smoke
 ```
 
 进入 shell：
@@ -122,7 +126,7 @@ GitHub Actions 会在以下场景检查或构建镜像：
 - 手动 `workflow_dispatch`
 - 每天 UTC 03:00 检查上游镜像 digest
 
-定时任务只在上游 `nousresearch/hermes-agent:latest` digest 变化时构建并推送。push 和手动触发会直接构建。
+定时任务只在上游 `nousresearch/hermes-agent:latest` digest 变化时构建并推送。push 和手动触发会直接构建。实际构建把 `FROM` 解析为 `tag@digest`，并写入 OCI `source`、`revision`、`created`、`base.name`、`base.digest` labels；因此 `latest` 可追溯到精确 custom commit 与 upstream manifest。
 
 每次实际构建会同时推送：
 
@@ -130,6 +134,7 @@ GitHub Actions 会在以下场景检查或构建镜像：
 latest
 YYYY-MM-DD
 upstream-<sha256>
+build-<custom-sha>-upstream-<base-sha>
 ```
 
 ### 默认用户
@@ -165,6 +170,8 @@ This repository does not fork, vendor, or modify the upstream Hermes Agent sourc
 ```text
 ghcr.io/develata/hermes-agent-custom-image:latest
 ghcr.io/develata/hermes-agent-custom-image:YYYY-MM-DD
+ghcr.io/develata/hermes-agent-custom-image:upstream-<sha256>
+ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>
 ```
 
 Base image:
@@ -215,6 +222,8 @@ Codex / CodeGraph / agently-cli are installed via npm, which is already availabl
 npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
 ```
 
+This repository does not duplicate Feishu/Lark dependency versions. Each build reads `project.optional-dependencies.feishu` from the upstream `/opt/hermes/pyproject.toml` and installs those exact requirements into the Hermes venv. The image smoke test fails closed if the extra disappears, omits `lark-oapi` / `qrcode`, or no longer satisfies the adapter's `extra_ua_tags` contract.
+
 The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
 
 ### Build and verify
@@ -227,7 +236,7 @@ Verify the core tools:
 
 ```bash
 docker run --rm hermes-agent-custom-image:latest \
-  sh -lc 'whoami && command -v gh && command -v jq && command -v rclone && command -v sshpass && docker compose version && cargo --version && command -v codex && codex --version && command -v codegraph && command -v agently-cli'
+  sh -lc hermes-custom-image-smoke
 ```
 
 Open a shell:
@@ -266,7 +275,7 @@ GitHub Actions checks or builds the image on:
 - manual `workflow_dispatch`
 - daily upstream digest check at 03:00 UTC
 
-Scheduled runs only build and push when the digest of `nousresearch/hermes-agent:latest` changes. Push and manual runs build directly.
+Scheduled runs only build and push when the digest of `nousresearch/hermes-agent:latest` changes. Push and manual runs build directly. Each build resolves `FROM` as `tag@digest` and records OCI `source`, `revision`, `created`, `base.name`, and `base.digest` labels, so `latest` remains traceable to an exact custom commit and upstream manifest.
 
 Each actual build pushes:
 
@@ -274,6 +283,7 @@ Each actual build pushes:
 latest
 YYYY-MM-DD
 upstream-<sha256>
+build-<custom-sha>-upstream-<base-sha>
 ```
 
 ### Default user
