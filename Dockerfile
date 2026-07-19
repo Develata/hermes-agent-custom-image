@@ -15,12 +15,17 @@ USER root
 # - unzip: archive handling for user-supplied artifacts
 # - rclone: OpenList/WebDAV transfer helper; use copy/sync by default,
 #   not FUSE mount
+# - git-lfs: Git Large File Storage support for repositories under /opt/gitclone
 # - Docker Compose CLI plugin: render/validate Compose files with
 #   `docker compose config`; no Docker daemon or socket is included
 # - build-essential/pkg-config/libssl-dev: common native dependencies for
 #   small Rust crates that compile C/OpenSSL bindings
 # - Rust minimal stable toolchain: local smoke tests and small scripts only;
 #   GitHub Actions remains the authoritative CI environment
+# - Elan + pinned stable Lean 4: direct Lean/Lake work while preserving each
+#   project's lean-toolchain selection; Mathlib stays project-local
+# - Tectonic: pinned single-binary TeX/LaTeX compiler; support files are
+#   downloaded and cached on demand instead of baking in a full TeX Live tree
 # - @openai/codex: Codex CLI delegation/review workflow
 # - @colbymchenry/codegraph: CodeGraph MCP/CLI
 #
@@ -46,11 +51,13 @@ RUN set -eux; \
         jq \
         unzip \
         rclone \
+        git-lfs \
         build-essential \
         pkg-config \
         sshpass \
         libssl-dev; \
-
+    git lfs install --system --skip-repo; \
+    git lfs version; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
@@ -111,6 +118,68 @@ RUN set -eux; \
         chown -R hermes:hermes "${RUSTUP_HOME}" "${CARGO_HOME}"; \
     fi; \
     chmod -R u+rwX,go+rX,go-w "${RUSTUP_HOME}" "${CARGO_HOME}"
+
+# Elan follows each project's checked-in lean-toolchain file and falls back to
+# this pinned stable Lean release outside a project. Keep ELAN_HOME outside the
+# /opt/data bind mount so the default toolchain remains part of the image.
+ENV ELAN_HOME=/usr/local/elan \
+    PATH=/usr/local/elan/bin:$PATH
+
+ARG ELAN_VERSION=4.2.3
+ARG LEAN_TOOLCHAIN=leanprover/lean4:v4.32.0
+ARG ELAN_X86_64_SHA256=df0b2b3a439961ffcbb3985214365ffe40f49bc871df04dff268c7d8e21ca8b2
+ARG ELAN_AARCH64_SHA256=cb69af0803b04157bc30201c29c12fca882bb3ad8b43476b8d2d3064810bc3ac
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+        x86_64) elan_target=x86_64-unknown-linux-gnu; elan_sha256="${ELAN_X86_64_SHA256}" ;; \
+        aarch64) elan_target=aarch64-unknown-linux-gnu; elan_sha256="${ELAN_AARCH64_SHA256}" ;; \
+        *) echo "unsupported Elan platform: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    elan_archive="/tmp/elan-${elan_target}.tar.gz"; \
+    curl --proto '=https' --tlsv1.2 -fsSL \
+        "https://github.com/leanprover/elan/releases/download/v${ELAN_VERSION}/elan-${elan_target}.tar.gz" \
+        -o "${elan_archive}"; \
+    printf '%s  %s\n' "${elan_sha256}" "${elan_archive}" | sha256sum -c -; \
+    tar -xzf "${elan_archive}" -C /tmp elan-init; \
+    /tmp/elan-init -y \
+        --no-modify-path \
+        --default-toolchain "${LEAN_TOOLCHAIN}"; \
+    elan --version | grep -F "elan ${ELAN_VERSION}"; \
+    lean --version | grep -F 'Lean (version 4.32.0'; \
+    lake --version; \
+    printf '%s\n' \
+        'export ELAN_HOME=/usr/local/elan' \
+        'case ":$PATH:" in *:/usr/local/elan/bin:*) ;; *) export PATH="/usr/local/elan/bin:$PATH" ;; esac' \
+        > /etc/profile.d/lean.sh; \
+    chmod 0644 /etc/profile.d/lean.sh; \
+    rm -f "${elan_archive}" /tmp/elan-init; \
+    if id hermes >/dev/null 2>&1; then \
+        chown -R hermes:hermes "${ELAN_HOME}"; \
+    fi; \
+    chmod -R u+rwX,go+rX,go-w "${ELAN_HOME}"
+
+# Tectonic is a real TeX/LaTeX compiler, unlike Typst, but remains a small
+# static binary. It fetches TeX support files on demand into the user's cache.
+ARG TECTONIC_VERSION=0.16.9
+ARG TECTONIC_X86_64_SHA256=60b13a0826ae7ad9ce34b4a2df06bff2cfcfa6dda8a915477c0cbb84e1a4a902
+ARG TECTONIC_AARCH64_SHA256=f9aa39017dbd51f111fdb93dda222178cbe51c8193508fc567b523cc74fff9c1
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+        x86_64) tectonic_target=x86_64-unknown-linux-musl; tectonic_sha256="${TECTONIC_X86_64_SHA256}" ;; \
+        aarch64) tectonic_target=aarch64-unknown-linux-musl; tectonic_sha256="${TECTONIC_AARCH64_SHA256}" ;; \
+        *) echo "unsupported Tectonic platform: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    tectonic_archive="/tmp/tectonic-${tectonic_target}.tar.gz"; \
+    curl --proto '=https' --tlsv1.2 -fsSL \
+        "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic@${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-${tectonic_target}.tar.gz" \
+        -o "${tectonic_archive}"; \
+    printf '%s  %s\n' "${tectonic_sha256}" "${tectonic_archive}" | sha256sum -c -; \
+    tar -xzf "${tectonic_archive}" -C /usr/local/bin tectonic; \
+    chmod 0755 /usr/local/bin/tectonic; \
+    tectonic --version | grep -F "Tectonic ${TECTONIC_VERSION}"; \
+    rm -f "${tectonic_archive}"
 
 # Feishu/Lark optional gateway deps are baked into the Hermes venv because
 # Feishu is configured as Develata's secondary gateway channel. Derive the

@@ -1,13 +1,39 @@
 #!/bin/sh
 set -eu
 
-for command_name in gh jq rclone sshpass docker cargo codex codegraph agently-cli; do
+for command_name in gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic codex codegraph agently-cli; do
     command -v "${command_name}" >/dev/null
 done
 
+git lfs version >/dev/null
+test "$(git config --system --get filter.lfs.required)" = "true"
 docker compose version >/dev/null
 cargo --version >/dev/null
+elan --version | grep -F 'elan 4.2.3' >/dev/null
+lean --version | grep -F 'Lean (version 4.32.0' >/dev/null
+lake --version >/dev/null
+tectonic --version | grep -F 'Tectonic 0.16.9' >/dev/null
 codex --version >/dev/null
+
+smoke_dir="$(mktemp -d)"
+trap 'rm -rf "${smoke_dir}"' EXIT HUP INT TERM
+
+cat > "${smoke_dir}/Smoke.lean" <<'LEAN'
+def answer : Nat := 42
+example : answer = 42 := rfl
+LEAN
+(cd "${smoke_dir}" && lean Smoke.lean)
+
+cat > "${smoke_dir}/smoke.tex" <<'TEX'
+\documentclass{article}
+\begin{document}
+Hermes Tectonic smoke: $1 + 1 = 2$.
+\end{document}
+TEX
+TECTONIC_UNTRUSTED_MODE=1 tectonic -X compile \
+    --outdir "${smoke_dir}" \
+    "${smoke_dir}/smoke.tex"
+test -s "${smoke_dir}/smoke.pdf"
 
 python_bin=/opt/hermes/.venv/bin/python
 "${python_bin}" - <<'PY'

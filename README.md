@@ -8,7 +8,7 @@
 
 ## 中文
 
-一个极小的 Hermes Agent 自定义 Docker 镜像包装仓库。
+一个聚焦于常用开发工具的 Hermes Agent 自定义 Docker 镜像包装仓库。
 
 本仓库不 fork、不复制、不改写上游 Hermes Agent 源码。它只做一件事：以官方上游镜像为基础，额外安装 Develata 常用的命令行工具，然后发布为自己的 GHCR 镜像。
 
@@ -48,8 +48,11 @@ jq
 unzip
 rclone
 sshpass
+git-lfs
 Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
+Elan 4.2.3 + Lean 4.32.0 + Lake
+Tectonic 0.16.9
 build-essential / pkg-config / libssl-dev
 codex
 codegraph
@@ -57,7 +60,7 @@ agently-cli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
-`gh` 来自 GitHub CLI 官方 apt 源；`jq`、`unzip`、`rclone`、`sshpass` 和基础编译依赖来自基础 Debian apt 仓库。
+`gh` 来自 GitHub CLI 官方 apt 源；`jq`、`unzip`、`rclone`、`sshpass`、`git-lfs` 和基础编译依赖来自基础 Debian apt 仓库。Git LFS filter 安装在 system Git config 中，不修改构建目录里的 repository hooks。
 
 Docker Compose 只安装 CLI plugin 到：
 
@@ -66,6 +69,10 @@ Docker Compose 只安装 CLI plugin 到：
 ```
 
 用途是在 Hermes 容器内运行 `docker compose config` 这类 Compose 文件渲染/校验命令。镜像不包含 Docker daemon，也不默认挂载宿主机 Docker socket。
+
+Lean 使用官方 Elan toolchain manager。镜像固定预装 `leanprover/lean4:v4.32.0` 作为默认 toolchain；若项目带有 `lean-toolchain` 文件，Elan 仍以项目声明的版本为准并按需安装。镜像不预装 Mathlib，也不把项目级 Lake/Mathlib cache 固化进全局工具层。
+
+Tectonic 使用官方 `0.16.9` static Linux binary，并在构建时校验 release SHA-256。它可以直接编译 `.tex`，所需 TeX support files 首次使用时按需下载到用户 cache；镜像不安装完整 TeX Live。处理不可信文档时使用 `--untrusted` 或 `TECTONIC_UNTRUSTED_MODE=1`。
 
 Codex / CodeGraph / agently-cli 通过上游镜像已有的 npm 安装：
 
@@ -110,6 +117,8 @@ services:
     image: ghcr.io/develata/hermes-agent-custom-image:latest
     restart: unless-stopped
 ```
+
+`git-lfs`、Lean/Lake 和 Tectonic 已直接烘入该镜像，不需要额外 sidecar、端口或 Docker socket。
 
 更新：
 
@@ -157,7 +166,7 @@ docker image inspect nousresearch/hermes-agent:latest --format '{{.Config.User}}
 
 ## English
 
-A tiny custom Docker image wrapper for Hermes Agent.
+A focused custom Docker image wrapper for Hermes Agent development tools.
 
 This repository does not fork, vendor, or modify the upstream Hermes Agent source code. It only rebuilds from the official upstream image, installs Develata's daily-use CLI tools, and publishes the result as a GHCR image.
 
@@ -197,8 +206,11 @@ jq
 unzip
 rclone
 sshpass
+git-lfs
 Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
+Elan 4.2.3 + Lean 4.32.0 + Lake
+Tectonic 0.16.9
 build-essential / pkg-config / libssl-dev
 codex
 codegraph
@@ -206,7 +218,7 @@ agently-cli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
-`gh` is installed from the official GitHub CLI apt repository. `jq`, `unzip`, `rclone`, `sshpass`, and native build dependencies are installed from the base Debian apt repositories.
+`gh` is installed from the official GitHub CLI apt repository. `jq`, `unzip`, `rclone`, `sshpass`, `git-lfs`, and native build dependencies are installed from the base Debian apt repositories. Git LFS filters are installed in the system Git config without modifying repository hooks during the image build.
 
 Docker Compose is installed only as the CLI plugin at:
 
@@ -215,6 +227,10 @@ Docker Compose is installed only as the CLI plugin at:
 ```
 
 This lets Hermes run Compose render/validation commands such as `docker compose config` inside the container. The image does not include a Docker daemon and does not mount the host Docker socket by default.
+
+Lean is managed by the official Elan toolchain manager. The image pins `leanprover/lean4:v4.32.0` as its preinstalled default toolchain, while projects with a checked-in `lean-toolchain` file continue to select and install their declared version. Mathlib and project-level Lake/Mathlib caches are deliberately not baked into the global tool layer.
+
+Tectonic is installed from the official `0.16.9` static Linux binary with its release SHA-256 verified during the build. It compiles `.tex` files directly and downloads required TeX support files into the user cache on first use; a full TeX Live tree is not installed. Use `--untrusted` or `TECTONIC_UNTRUSTED_MODE=1` for untrusted documents.
 
 Codex / CodeGraph / agently-cli are installed via npm, which is already available in the upstream image:
 
@@ -259,6 +275,8 @@ services:
     image: ghcr.io/develata/hermes-agent-custom-image:latest
     restart: unless-stopped
 ```
+
+`git-lfs`, Lean/Lake, and Tectonic are baked directly into this image; no extra sidecars, exposed ports, or Docker socket are required.
 
 Update:
 
