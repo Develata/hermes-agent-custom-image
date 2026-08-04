@@ -63,11 +63,19 @@ for requirement in parsed:
             f"installed {requirement.name}=={installed} does not satisfy {requirement}"
         )
 
-from lark_oapi.ws import Client
-from plugins.platforms.feishu.adapter import FEISHU_AVAILABLE
+from plugins.platforms.feishu import adapter as feishu_adapter
 
-if not FEISHU_AVAILABLE:
-    raise SystemExit("Feishu platform adapter reports FEISHU_AVAILABLE=false")
+if not feishu_adapter._load_lark_oapi():
+    raise SystemExit("Feishu platform adapter failed to load lark_oapi")
+if not feishu_adapter.FEISHU_AVAILABLE:
+    raise SystemExit(
+        "Feishu platform adapter reports FEISHU_AVAILABLE=false after loading"
+    )
+
+Client = feishu_adapter.FeishuWSClient
+if Client is None:
+    raise SystemExit("Feishu platform adapter did not bind FeishuWSClient")
+
 if "extra_ua_tags" not in inspect.signature(Client.__init__).parameters:
     raise SystemExit("lark_oapi.ws.Client lacks required extra_ua_tags parameter")
 
