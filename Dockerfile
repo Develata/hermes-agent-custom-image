@@ -26,7 +26,6 @@ USER root
 #   project's lean-toolchain selection; Mathlib stays project-local
 # - Tectonic: pinned single-binary TeX/LaTeX compiler; support files are
 #   downloaded and cached on demand instead of baking in a full TeX Live tree
-# - @openai/codex: Codex CLI delegation/review workflow
 # - @colbymchenry/codegraph: CodeGraph MCP/CLI
 #
 # Deliberately not included:
