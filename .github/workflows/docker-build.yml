@@ -65,7 +65,23 @@ jobs:
         id: upstream
         shell: bash
         run: |
-          upstream_digest="$(docker buildx imagetools inspect "${UPSTREAM_IMAGE}" --format '{{.Manifest.Digest}}')"
+          upstream_digest=""
+          for attempt in 1 2 3 4 5; do
+            if upstream_digest="$(docker buildx imagetools inspect "${UPSTREAM_IMAGE}" --format '{{.Manifest.Digest}}')"; then
+              break
+            fi
+
+            echo "::warning::Upstream digest lookup failed (attempt ${attempt}/5)"
+            if [ "${attempt}" -lt 5 ]; then
+              sleep $((attempt * 15))
+            fi
+          done
+
+          if [ -z "${upstream_digest}" ]; then
+            echo "::error::Unable to resolve upstream image digest after 5 attempts"
+            exit 1
+          fi
+
           digest_hex="${upstream_digest#sha256:}"
           upstream_tag="upstream-${digest_hex}"
           immutable_tag="build-${CUSTOM_REVISION}-upstream-${digest_hex:0:12}"
