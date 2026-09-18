@@ -28,6 +28,7 @@ USER root
 #   downloaded and cached on demand instead of baking in a full TeX Live tree
 # - Bun: pinned JavaScript runtime/package manager for custom global CLI installs
 # - @colbymchenry/codegraph: CodeGraph MCP/CLI
+# - @jackwener/opencli: website/browser/local-tool CLI hub for agents
 #
 # Deliberately not included:
 # - python3-pip: prefer uv / the Hermes venv; avoid PEP 668 friction
@@ -212,11 +213,13 @@ RUN set -eux; \
     rm -f /tmp/hermes-feishu-requirements.txt
 
 RUN set -eux; \
-    bun add --global \
+    bun add -g --trust \
         @colbymchenry/codegraph \
-        @tencent-qqmail/agently-cli; \
+        @tencent-qqmail/agently-cli \
+        @jackwener/opencli; \
     command -v codegraph; \
     command -v agently-cli; \
+    command -v opencli; \
     bun pm cache rm
 
 COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke
