@@ -260,11 +260,16 @@ ARG AGENT_REACH_REV=a19a171fa980a0785849596492e0af4db800c82f
 
 RUN set -eux; \
     command -v opencli; \
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-all-errors \
+        "https://raw.githubusercontent.com/Panniantong/Agent-Reach/${AGENT_REACH_REV}/constraints.txt" \
+        -o /tmp/agent-reach-constraints.txt; \
     UV_TOOL_DIR=/usr/local/share/uv/tools \
     UV_TOOL_BIN_DIR=/usr/local/bin \
     uv tool install --python /usr/bin/python3 \
+        --constraints /tmp/agent-reach-constraints.txt \
         --with-executables-from yt-dlp \
         "git+https://github.com/Panniantong/Agent-Reach.git@${AGENT_REACH_REV}"; \
+    rm -f /tmp/agent-reach-constraints.txt; \
     command -v agent-reach; \
     command -v yt-dlp; \
     agent-reach --version
