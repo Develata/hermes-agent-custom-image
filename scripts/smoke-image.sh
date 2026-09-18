@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-for command_name in gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic codegraph agently-cli; do
+for command_name in gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic bun codegraph agently-cli; do
     command -v "${command_name}" >/dev/null
 done
 
@@ -13,6 +13,9 @@ elan --version | grep -F 'elan 4.2.3' >/dev/null
 lean --version | grep -F 'Lean (version 4.32.0' >/dev/null
 lake --version >/dev/null
 tectonic --version | grep -F 'Tectonic 0.16.9' >/dev/null
+bun --version | grep -Fx '1.4.2' >/dev/null
+codegraph --help >/dev/null
+agently-cli --help >/dev/null
 
 smoke_dir="$(mktemp -d)"
 trap 'rm -rf "${smoke_dir}"' EXIT HUP INT TERM
