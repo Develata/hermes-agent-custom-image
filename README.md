@@ -85,7 +85,7 @@ bun add -g --trust \
   @jackwener/opencli@1.8.8
 ```
 
-构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。OpenCLI 安装完成后，再使用上游已有的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，并额外暴露同一环境里的 `yt-dlp` executable。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
+构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。预装 Bun CLI 固定在 `/usr/local`；运行时若 Hermes 自己执行 `bun add -g`，则写入持久化的 `/opt/data/.bun`，命令链接进入已经在 PATH 中的 `/opt/data/.local/bin`。OpenCLI 安装完成后，再使用上游已有的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，并额外暴露同一环境里的 `yt-dlp` executable。构建时只临时把 uv tool 目录指向 `/usr/local`，不改变运行时 uv 的用户级默认目录。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
 
 当前 Hermes 上游使用 Node 26。CodeGraph 1.6.0 的 package metadata 仍声明 Node `>=20 <25`；本镜像按使用需求暂时保留 CodeGraph，不额外安装 Node 24，并通过 Docker smoke test 实际执行 `codegraph --help`。若未来 Node 26 造成真实运行故障，应优先等待/升级 CodeGraph，而不是在基础镜像长期维护第二套 Node。
 
@@ -256,7 +256,7 @@ bun add -g --trust \
   @jackwener/opencli@1.8.8
 ```
 
-Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. After OpenCLI is present, Agent Reach is installed with the upstream `uv` into an isolated tool environment, pinned to an exact upstream commit; the same environment also exposes the `yt-dlp` executable. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
+Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. Preinstalled Bun CLIs stay under `/usr/local`; runtime `bun add -g` operations by Hermes write to the durable `/opt/data/.bun` tree and link commands into `/opt/data/.local/bin`, which is already on the upstream PATH. After OpenCLI is present, Agent Reach is installed with the upstream `uv` into an isolated tool environment, pinned to an exact upstream commit; the same environment also exposes the `yt-dlp` executable. The uv tool directories are overridden only for the image-build step, leaving runtime uv tool installs on the normal user-writable path. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
 
 The current Hermes upstream image uses Node 26. CodeGraph 1.6.0 still declares Node `>=20 <25`; this image intentionally keeps CodeGraph without adding a second Node 24 runtime and exercises `codegraph --help` in the Docker smoke test. If Node 26 causes a real failure, the preferred path is to update CodeGraph when upstream support lands rather than permanently carry another Node runtime.
 
