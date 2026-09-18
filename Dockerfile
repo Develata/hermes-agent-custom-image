@@ -5,7 +5,7 @@ FROM ${UPSTREAM_IMAGE}
 USER root
 
 # Upstream Hermes image already includes ca-certificates, curl, python3,
-# git, openssh-client, docker-cli, node 22, npm, uv, ripgrep, ffmpeg,
+# git, openssh-client, docker-cli, node 26, npm, uv, ripgrep, ffmpeg,
 # gcc/python3-dev/libffi-dev, procps, and xz-utils. Keep this layer only
 # for Develata-specific tools that are not part of the base image.
 #
@@ -18,8 +18,8 @@ USER root
 # - git-lfs: Git Large File Storage support for repositories under /opt/gitclone
 # - Docker Compose CLI plugin: render/validate Compose files with
 #   `docker compose config`; no Docker daemon or socket is included
-# - build-essential/pkg-config/libssl-dev: common native dependencies for
-#   small Rust crates that compile C/OpenSSL bindings
+# - pkg-config/libssl-dev: native metadata/headers for small Rust crates that
+#   compile OpenSSL bindings; upstream already provides gcc/g++/make/cmake
 # - Rust minimal stable toolchain: local smoke tests and small scripts only;
 #   GitHub Actions remains the authoritative CI environment
 # - Elan + pinned stable Lean 4: direct Lean/Lake work while preserving each
@@ -29,6 +29,7 @@ USER root
 # - Bun: pinned JavaScript runtime/package manager for custom global CLI installs
 # - @colbymchenry/codegraph: CodeGraph MCP/CLI
 # - @jackwener/opencli: website/browser/local-tool CLI hub for agents
+# - Agent Reach: internet capability installer/doctor, isolated via uv tool
 #
 # Deliberately not included:
 # - python3-pip: prefer uv / the Hermes venv; avoid PEP 668 friction
@@ -53,7 +54,6 @@ RUN set -eux; \
         unzip \
         rclone \
         git-lfs \
-        build-essential \
         pkg-config \
         sshpass \
         libssl-dev; \
@@ -62,21 +62,33 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-# Install Bun system-wide so both root during image build and the runtime
-# hermes user can use it. Keep global CLI bins in /usr/local/bin rather than
-# root's home directory.
+# Install Bun from the pinned official release asset and verify its SHA-256.
+# Avoid executing a mutable remote install script during the image build.
+# Global Bun packages and their command shims live under /usr/local.
 ENV BUN_INSTALL=/usr/local/bun \
     BUN_INSTALL_BIN=/usr/local/bin \
-    BUN_INSTALL_GLOBAL_DIR=/usr/local/bun/install/global \
-    PATH=/usr/local/bun/bin:$PATH
+    BUN_INSTALL_GLOBAL_DIR=/usr/local/bun/install/global
 
 ARG BUN_VERSION=1.4.2
+ARG BUN_X86_64_SHA256=36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913
+ARG BUN_AARCH64_SHA256=54328bbc2d9c8e0c9f892c544d66c57a83b84139e34909e5ee81758f1ac8fda7
 
 RUN set -eux; \
-    curl -fsSL https://bun.com/install -o /tmp/install-bun.sh; \
-    bash /tmp/install-bun.sh "bun-v${BUN_VERSION}"; \
+    case "$(uname -m)" in \
+        x86_64) bun_target=linux-x64; bun_sha256="${BUN_X86_64_SHA256}" ;; \
+        aarch64) bun_target=linux-aarch64; bun_sha256="${BUN_AARCH64_SHA256}" ;; \
+        *) echo "unsupported Bun platform: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    bun_archive="/tmp/bun-${bun_target}.zip"; \
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-all-errors \
+        "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-${bun_target}.zip" \
+        -o "${bun_archive}"; \
+    printf '%s  %s\n' "${bun_sha256}" "${bun_archive}" | sha256sum -c -; \
+    rm -rf /tmp/bun-extract; \
+    unzip -q "${bun_archive}" -d /tmp/bun-extract; \
+    install -m 0755 "/tmp/bun-extract/bun-${bun_target}/bun" /usr/local/bin/bun; \
     bun --version | grep -Fx "${BUN_VERSION}"; \
-    rm -f /tmp/install-bun.sh
+    rm -rf "${bun_archive}" /tmp/bun-extract
 
 ARG DOCKER_COMPOSE_VERSION=v5.3.0
 
@@ -107,7 +119,6 @@ RUN set -eux; \
 # cargo clippy, cargo test, and cargo build.
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH \
     CARGO_TERM_COLOR=always
 
 ARG RUST_TOOLCHAIN=stable
@@ -123,10 +134,12 @@ RUN set -eux; \
     rustup --version; \
     rustc --version; \
     cargo --version; \
+    for rust_bin in cargo rustc rustup rustfmt cargo-clippy clippy-driver; do \
+        test ! -e "${CARGO_HOME}/bin/${rust_bin}" || ln -sf "${CARGO_HOME}/bin/${rust_bin}" "/usr/local/bin/${rust_bin}"; \
+    done; \
     printf '%s\n' \
         'export RUSTUP_HOME=/usr/local/rustup' \
         'export CARGO_HOME=/usr/local/cargo' \
-        'case ":$PATH:" in *:/usr/local/cargo/bin:*) ;; *) export PATH="/usr/local/cargo/bin:$PATH" ;; esac' \
         'export CARGO_TERM_COLOR=always' \
         > /etc/profile.d/rust.sh; \
     chmod 0644 /etc/profile.d/rust.sh; \
@@ -139,8 +152,7 @@ RUN set -eux; \
 # Elan follows each project's checked-in lean-toolchain file and falls back to
 # this pinned stable Lean release outside a project. Keep ELAN_HOME outside the
 # /opt/data bind mount so the default toolchain remains part of the image.
-ENV ELAN_HOME=/usr/local/elan \
-    PATH=/usr/local/elan/bin:$PATH
+ENV ELAN_HOME=/usr/local/elan
 
 ARG ELAN_VERSION=4.2.3
 ARG LEAN_TOOLCHAIN=leanprover/lean4:v4.32.0
@@ -165,9 +177,11 @@ RUN set -eux; \
     elan --version | grep -F "elan ${ELAN_VERSION}"; \
     lean --version | grep -F 'Lean (version 4.32.0'; \
     lake --version; \
+    for lean_bin in elan lean leanc lake; do \
+        test ! -e "${ELAN_HOME}/bin/${lean_bin}" || ln -sf "${ELAN_HOME}/bin/${lean_bin}" "/usr/local/bin/${lean_bin}"; \
+    done; \
     printf '%s\n' \
         'export ELAN_HOME=/usr/local/elan' \
-        'case ":$PATH:" in *:/usr/local/elan/bin:*) ;; *) export PATH="/usr/local/elan/bin:$PATH" ;; esac' \
         > /etc/profile.d/lean.sh; \
     chmod 0644 /etc/profile.d/lean.sh; \
     rm -f "${elan_archive}" /tmp/elan-init; \
@@ -212,14 +226,42 @@ RUN set -eux; \
         -r /tmp/hermes-feishu-requirements.txt; \
     rm -f /tmp/hermes-feishu-requirements.txt
 
+ARG CODEGRAPH_VERSION=1.6.0
+ARG AGENTLY_CLI_VERSION=1.0.18
+ARG OPENCLI_VERSION=1.8.8
+
+# Keep trusted lifecycle scripts for these explicitly selected CLIs, but pin
+# the top-level versions so a rebuild cannot silently move to a new release.
+# Use a throwaway HOME so package postinstall scripts cannot bake root-owned
+# user configuration such as /root/.opencli into the image.
 RUN set -eux; \
-    bun add -g --trust \
-        @colbymchenry/codegraph \
-        @tencent-qqmail/agently-cli \
-        @jackwener/opencli; \
+    install -d -m 0700 /tmp/bun-global-home; \
+    HOME=/tmp/bun-global-home bun add -g --trust \
+        "@colbymchenry/codegraph@${CODEGRAPH_VERSION}" \
+        "@tencent-qqmail/agently-cli@${AGENTLY_CLI_VERSION}" \
+        "@jackwener/opencli@${OPENCLI_VERSION}"; \
     command -v codegraph; \
     command -v agently-cli; \
     command -v opencli; \
+    rm -rf /tmp/bun-global-home; \
     bun pm cache rm
+
+# Agent Reach is a Python CLI, so keep it isolated from Hermes' own venv with
+# uv tool. Pin the exact upstream revision rather than installing the unrelated
+# PyPI project with the same name. Expose yt-dlp from the same tool environment
+# because Agent Reach treats it as a core upstream CLI.
+ENV UV_TOOL_DIR=/usr/local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin
+
+ARG AGENT_REACH_REV=a19a171fa980a0785849596492e0af4db800c82f
+
+RUN set -eux; \
+    command -v opencli; \
+    uv tool install --python /usr/bin/python3 \
+        --with-executables-from 'yt-dlp[default]' \
+        "git+https://github.com/Panniantong/Agent-Reach.git@${AGENT_REACH_REV}"; \
+    command -v agent-reach; \
+    command -v yt-dlp; \
+    agent-reach version
 
 COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke
