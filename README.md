@@ -53,8 +53,8 @@ Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
+Bun 1.4.2
 build-essential / pkg-config / libssl-dev
-codex
 codegraph
 agently-cli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
@@ -74,11 +74,13 @@ Lean 使用官方 Elan toolchain manager。镜像固定预装 `leanprover/lean4:
 
 Tectonic 使用官方 `0.16.9` static Linux binary，并在构建时校验 release SHA-256。它可以直接编译 `.tex`，所需 TeX support files 首次使用时按需下载到用户 cache；镜像不安装完整 TeX Live。处理不可信文档时使用 `--untrusted` 或 `TECTONIC_UNTRUSTED_MODE=1`。
 
-Codex / CodeGraph / agently-cli 通过上游镜像已有的 npm 安装：
+Bun 1.4.2 通过官方安装器固定版本安装到 `/usr/local/bun`，全局 CLI 链接写入 `/usr/local/bin`。CodeGraph / agently-cli 使用 Bun 的全局包管理安装：
 
 ```bash
-npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g @colbymchenry/codegraph @tencent-qqmail/agently-cli
 ```
+
+当前 Dockerfile 不再通过 npm 安装这些自定义 CLI。Node.js/npm 仍保留为上游运行环境的一部分；如果镜像中存在 Codex，则由上游基础镜像提供，而不是本包装层重复安装。
 
 Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `/opt/hermes/pyproject.toml` 的 `project.optional-dependencies.feishu`，把同一组 requirements 安装进 Hermes venv；若上游移除该 extra、缺少 `lark-oapi` / `qrcode`，或 SDK 不再满足 adapter 的 `extra_ua_tags` contract，构建 smoke 会 fail closed。
 
@@ -211,8 +213,8 @@ Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
+Bun 1.4.2
 build-essential / pkg-config / libssl-dev
-codex
 codegraph
 agently-cli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
@@ -232,11 +234,13 @@ Lean is managed by the official Elan toolchain manager. The image pins `leanprov
 
 Tectonic is installed from the official `0.16.9` static Linux binary with its release SHA-256 verified during the build. It compiles `.tex` files directly and downloads required TeX support files into the user cache on first use; a full TeX Live tree is not installed. Use `--untrusted` or `TECTONIC_UNTRUSTED_MODE=1` for untrusted documents.
 
-Codex / CodeGraph / agently-cli are installed via npm, which is already available in the upstream image:
+Bun 1.4.2 is installed at a pinned version with the official installer under `/usr/local/bun`, with global CLI links placed in `/usr/local/bin`. CodeGraph / agently-cli are installed with Bun's global package manager:
 
 ```bash
-npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g @colbymchenry/codegraph @tencent-qqmail/agently-cli
 ```
+
+The current Dockerfile no longer uses npm to install these custom CLIs. Node.js/npm remain available as part of the upstream runtime. If Codex is present in the image, it is supplied by the upstream base image rather than reinstalled by this wrapper.
 
 This repository does not duplicate Feishu/Lark dependency versions. Each build reads `project.optional-dependencies.feishu` from the upstream `/opt/hermes/pyproject.toml` and installs those exact requirements into the Hermes venv. The image smoke test fails closed if the extra disappears, omits `lark-oapi` / `qrcode`, or no longer satisfies the adapter's `extra_ua_tags` contract.
 
