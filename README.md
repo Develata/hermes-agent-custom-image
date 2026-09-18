@@ -225,10 +225,11 @@ Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
 Bun 1.4.2
-build-essential / pkg-config / libssl-dev
-codegraph
-agently-cli
-opencli
+pkg-config / libssl-dev
+codegraph 1.6.0
+agently-cli 1.0.18
+opencli 1.8.8
+Agent Reach (pinned upstream revision) + yt-dlp
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
