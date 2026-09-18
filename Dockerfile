@@ -130,10 +130,10 @@ RUN set -eux; \
         --no-modify-path \
         --profile minimal \
         --default-toolchain "${RUST_TOOLCHAIN}"; \
-    rustup component add rustfmt clippy; \
-    rustup --version; \
-    rustc --version; \
-    cargo --version; \
+    "${CARGO_HOME}/bin/rustup" component add rustfmt clippy; \
+    "${CARGO_HOME}/bin/rustup" --version; \
+    "${CARGO_HOME}/bin/rustc" --version; \
+    "${CARGO_HOME}/bin/cargo" --version; \
     for rust_bin in cargo rustc rustup rustfmt cargo-clippy clippy-driver; do \
         test ! -e "${CARGO_HOME}/bin/${rust_bin}" || ln -sf "${CARGO_HOME}/bin/${rust_bin}" "/usr/local/bin/${rust_bin}"; \
     done; \
@@ -174,9 +174,9 @@ RUN set -eux; \
     /tmp/elan-init -y \
         --no-modify-path \
         --default-toolchain "${LEAN_TOOLCHAIN}"; \
-    elan --version | grep -F "elan ${ELAN_VERSION}"; \
-    lean --version | grep -F 'Lean (version 4.32.0'; \
-    lake --version; \
+    "${ELAN_HOME}/bin/elan" --version | grep -F "elan ${ELAN_VERSION}"; \
+    "${ELAN_HOME}/bin/lean" --version | grep -F 'Lean (version 4.32.0'; \
+    "${ELAN_HOME}/bin/lake" --version; \
     for lean_bin in elan lean leanc lake; do \
         test ! -e "${ELAN_HOME}/bin/${lean_bin}" || ln -sf "${ELAN_HOME}/bin/${lean_bin}" "/usr/local/bin/${lean_bin}"; \
     done; \
