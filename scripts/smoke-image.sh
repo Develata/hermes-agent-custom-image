@@ -18,7 +18,7 @@ codegraph --help >/dev/null
 agently-cli --help >/dev/null
 opencli --version >/dev/null
 opencli list >/dev/null
-agent-reach version >/dev/null
+agent-reach --version >/dev/null
 yt-dlp --version >/dev/null
 
 smoke_dir="$(mktemp -d)"
