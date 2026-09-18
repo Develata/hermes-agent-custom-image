@@ -57,6 +57,7 @@ Bun 1.4.2
 build-essential / pkg-config / libssl-dev
 codegraph
 agently-cli
+opencli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
@@ -74,11 +75,16 @@ Lean 使用官方 Elan toolchain manager。镜像固定预装 `leanprover/lean4:
 
 Tectonic 使用官方 `0.16.9` static Linux binary，并在构建时校验 release SHA-256。它可以直接编译 `.tex`，所需 TeX support files 首次使用时按需下载到用户 cache；镜像不安装完整 TeX Live。处理不可信文档时使用 `--untrusted` 或 `TECTONIC_UNTRUSTED_MODE=1`。
 
-Bun 1.4.2 通过官方安装器固定版本安装到 `/usr/local/bun`，全局 CLI 链接写入 `/usr/local/bin`。CodeGraph / agently-cli 使用 Bun 的全局包管理安装：
+Bun 1.4.2 通过官方安装器固定版本安装到 `/usr/local/bun`，全局 CLI 链接写入 `/usr/local/bin`。CodeGraph / agently-cli / OpenCLI 使用 Bun 的全局包管理安装，并显式信任安装包的 lifecycle scripts：
 
 ```bash
-bun add -g @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g --trust \
+  @colbymchenry/codegraph \
+  @tencent-qqmail/agently-cli \
+  @jackwener/opencli
 ```
+
+这里使用 `--trust`，避免依赖安装期脚本的 CLI 因 Bun 默认阻止 dependency lifecycle scripts 而处于“命令存在但安装不完整”的状态。OpenCLI 的纯 CLI/服务器安装会提供 `opencli` 命令；涉及已登录浏览器会话的 browser-backed 功能仍需要可连接的 Chrome/Chromium Browser Bridge。
 
 当前 Dockerfile 不再通过 npm 安装这些自定义 CLI。Node.js/npm 仍保留为上游运行环境的一部分；如果镜像中存在 Codex，则由上游基础镜像提供，而不是本包装层重复安装。
 
@@ -234,11 +240,16 @@ Lean is managed by the official Elan toolchain manager. The image pins `leanprov
 
 Tectonic is installed from the official `0.16.9` static Linux binary with its release SHA-256 verified during the build. It compiles `.tex` files directly and downloads required TeX support files into the user cache on first use; a full TeX Live tree is not installed. Use `--untrusted` or `TECTONIC_UNTRUSTED_MODE=1` for untrusted documents.
 
-Bun 1.4.2 is installed at a pinned version with the official installer under `/usr/local/bun`, with global CLI links placed in `/usr/local/bin`. CodeGraph / agently-cli are installed with Bun's global package manager:
+Bun 1.4.2 is installed at a pinned version with the official installer under `/usr/local/bun`, with global CLI links placed in `/usr/local/bin`. CodeGraph / agently-cli / OpenCLI are installed with Bun's global package manager, explicitly trusting package lifecycle scripts:
 
 ```bash
-bun add -g @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g --trust \
+  @colbymchenry/codegraph \
+  @tencent-qqmail/agently-cli \
+  @jackwener/opencli
 ```
+
+Using `--trust` avoids partially installed CLIs when a package relies on dependency lifecycle scripts that Bun would otherwise block by default. The CLI/server installation provides the `opencli` command; browser-backed OpenCLI features that reuse an authenticated browser session still require a reachable Chrome/Chromium Browser Bridge.
 
 The current Dockerfile no longer uses npm to install these custom CLIs. Node.js/npm remain available as part of the upstream runtime. If Codex is present in the image, it is supplied by the upstream base image rather than reinstalled by this wrapper.
 
