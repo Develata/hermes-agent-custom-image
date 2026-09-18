@@ -57,7 +57,7 @@ Bun 1.4.2
 pkg-config / libssl-dev
 codegraph 1.6.0
 agently-cli 1.0.18
-opencli 1.8.8
+opencli 1.8.7
 Agent Reach (pinned upstream revision) + yt-dlp
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
@@ -82,7 +82,7 @@ Bun 1.4.2 直接从官方 GitHub Release 下载对应架构的单文件二进制
 bun add -g --trust \
   @colbymchenry/codegraph@1.6.0 \
   @tencent-qqmail/agently-cli@1.0.18 \
-  @jackwener/opencli@1.8.8
+  @jackwener/opencli@1.8.7
 ```
 
 构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。预装 Bun CLI 固定在 `/usr/local`；运行时若 Hermes 自己执行 `bun add -g`，则写入持久化的 `/opt/data/.bun`，命令链接进入已经在 PATH 中的 `/opt/data/.local/bin`。OpenCLI 安装完成后，再使用上游已有的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，并额外暴露同一环境里的 `yt-dlp` executable。构建时只临时把 uv tool 目录指向 `/usr/local`，不改变运行时 uv 的用户级默认目录。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
@@ -228,7 +228,7 @@ Bun 1.4.2
 pkg-config / libssl-dev
 codegraph 1.6.0
 agently-cli 1.0.18
-opencli 1.8.8
+opencli 1.8.7
 Agent Reach (pinned upstream revision) + yt-dlp
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
@@ -253,7 +253,7 @@ Bun 1.4.2 is downloaded directly from the official GitHub Release for the target
 bun add -g --trust \
   @colbymchenry/codegraph@1.6.0 \
   @tencent-qqmail/agently-cli@1.0.18 \
-  @jackwener/opencli@1.8.8
+  @jackwener/opencli@1.8.7
 ```
 
 Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. Preinstalled Bun CLIs stay under `/usr/local`; runtime `bun add -g` operations by Hermes write to the durable `/opt/data/.bun` tree and link commands into `/opt/data/.local/bin`, which is already on the upstream PATH. After OpenCLI is present, Agent Reach is installed with the upstream `uv` into an isolated tool environment, pinned to an exact upstream commit; the same environment also exposes the `yt-dlp` executable. The uv tool directories are overridden only for the image-build step, leaving runtime uv tool installs on the normal user-writable path. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
