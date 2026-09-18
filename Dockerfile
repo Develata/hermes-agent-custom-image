@@ -263,7 +263,7 @@ RUN set -eux; \
     UV_TOOL_DIR=/usr/local/share/uv/tools \
     UV_TOOL_BIN_DIR=/usr/local/bin \
     uv tool install --python /usr/bin/python3 \
-        --with-executables-from 'yt-dlp[default]' \
+        --with-executables-from yt-dlp \
         "git+https://github.com/Panniantong/Agent-Reach.git@${AGENT_REACH_REV}"; \
     command -v agent-reach; \
     command -v yt-dlp; \
