@@ -230,7 +230,7 @@ RUN set -eux; \
 
 ARG CODEGRAPH_VERSION=1.6.0
 ARG AGENTLY_CLI_VERSION=1.0.18
-ARG OPENCLI_VERSION=1.8.8
+ARG OPENCLI_VERSION=1.8.7
 
 # Keep trusted lifecycle scripts for these explicitly selected CLIs, but pin
 # the top-level versions so a rebuild cannot silently move to a new release.
