@@ -267,6 +267,6 @@ RUN set -eux; \
         "git+https://github.com/Panniantong/Agent-Reach.git@${AGENT_REACH_REV}"; \
     command -v agent-reach; \
     command -v yt-dlp; \
-    agent-reach version
+    agent-reach --version
 
 COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke
