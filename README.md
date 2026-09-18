@@ -53,10 +53,12 @@ Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
-build-essential / pkg-config / libssl-dev
-codex
-codegraph
-agently-cli
+Bun 1.4.2
+pkg-config / libssl-dev
+codegraph 1.6.0
+agently-cli 1.0.18
+opencli 1.8.7
+Agent Reach (pinned upstream revision) + yt-dlp
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
@@ -74,15 +76,26 @@ Lean 使用官方 Elan toolchain manager。镜像固定预装 `leanprover/lean4:
 
 Tectonic 使用官方 `0.16.9` static Linux binary，并在构建时校验 release SHA-256。它可以直接编译 `.tex`，所需 TeX support files 首次使用时按需下载到用户 cache；镜像不安装完整 TeX Live。处理不可信文档时使用 `--untrusted` 或 `TECTONIC_UNTRUSTED_MODE=1`。
 
-Codex / CodeGraph / agently-cli 通过上游镜像已有的 npm 安装：
+Bun 1.4.2 直接从官方 GitHub Release 下载对应架构的单文件二进制，并在构建时校验 SHA-256；不执行远程安装脚本。全局 CLI 链接写入 `/usr/local/bin`。CodeGraph / agently-cli / OpenCLI 使用 Bun 安装，并显式信任 lifecycle scripts，同时固定顶层版本：
 
 ```bash
-npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g --trust \
+  @colbymchenry/codegraph@1.6.0 \
+  @tencent-qqmail/agently-cli@1.0.18 \
+  @jackwener/opencli@1.8.7
 ```
+
+构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。预装 Bun CLI 固定在 `/usr/local`；运行时若 Hermes 自己执行 `bun add -g`，则写入持久化的 `/opt/data/.bun`，命令链接进入已经在 PATH 中的 `/opt/data/.local/bin`。OpenCLI 安装完成后，再使用上游已有的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，安装时同时采用该 commit 自带的 `constraints.txt` 收紧依赖版本，并额外暴露同一环境里的 `yt-dlp` executable。构建时只临时把 uv tool 目录指向 `/usr/local`，不改变运行时 uv 的用户级默认目录。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
+
+当前 Hermes 上游使用 Node 26。CodeGraph 1.6.0 的 package metadata 仍声明 Node `>=20 <25`；本镜像按使用需求暂时保留 CodeGraph，不额外安装 Node 24，并通过 Docker smoke test 实际执行 `codegraph --help`。若未来 Node 26 造成真实运行故障，应优先等待/升级 CodeGraph，而不是在基础镜像长期维护第二套 Node。
+
+当前 Dockerfile 不再通过 npm 安装这些自定义 CLI。Node.js/npm 仍保留为上游运行环境的一部分；如果镜像中存在 Codex，则由上游基础镜像提供，而不是本包装层重复安装。
 
 Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `/opt/hermes/pyproject.toml` 的 `project.optional-dependencies.feishu`，把同一组 requirements 安装进 Hermes venv；若上游移除该 extra、缺少 `lark-oapi` / `qrcode`，或 SDK 不再满足 adapter 的 `extra_ua_tags` contract，构建 smoke 会 fail closed。
 
-当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
+上游现在也支持把 Feishu 等可选依赖按需安装到 `/opt/data/lazy-packages`。这里仍保留构建时预装 Feishu，原因是该实例把 Feishu 作为长期 gateway 渠道：这样首次连接不依赖当时的 PyPI 可用性；其版本仍完全跟随上游声明。
+
+当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js 26、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
 
 ### 本地构建与验证
 
@@ -211,10 +224,12 @@ Docker Compose CLI plugin
 Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
-build-essential / pkg-config / libssl-dev
-codex
-codegraph
-agently-cli
+Bun 1.4.2
+pkg-config / libssl-dev
+codegraph 1.6.0
+agently-cli 1.0.18
+opencli 1.8.7
+Agent Reach (pinned upstream revision) + yt-dlp
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
@@ -232,15 +247,26 @@ Lean is managed by the official Elan toolchain manager. The image pins `leanprov
 
 Tectonic is installed from the official `0.16.9` static Linux binary with its release SHA-256 verified during the build. It compiles `.tex` files directly and downloads required TeX support files into the user cache on first use; a full TeX Live tree is not installed. Use `--untrusted` or `TECTONIC_UNTRUSTED_MODE=1` for untrusted documents.
 
-Codex / CodeGraph / agently-cli are installed via npm, which is already available in the upstream image:
+Bun 1.4.2 is downloaded directly from the official GitHub Release for the target architecture and SHA-256 verified during the build; no mutable remote installer script is executed. Global CLI links are placed in `/usr/local/bin`. CodeGraph / agently-cli / OpenCLI are installed with Bun, trusted lifecycle scripts, and pinned top-level versions:
 
 ```bash
-npm install -g @openai/codex @colbymchenry/codegraph @tencent-qqmail/agently-cli
+bun add -g --trust \
+  @colbymchenry/codegraph@1.6.0 \
+  @tencent-qqmail/agently-cli@1.0.18 \
+  @jackwener/opencli@1.8.7
 ```
+
+Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. Preinstalled Bun CLIs stay under `/usr/local`; runtime `bun add -g` operations by Hermes write to the durable `/opt/data/.bun` tree and link commands into `/opt/data/.local/bin`, which is already on the upstream PATH. After OpenCLI is present, Agent Reach is installed with the upstream `uv` into an isolated tool environment, pinned to an exact upstream commit and constrained by that commit's tested `constraints.txt`; the same environment also exposes the `yt-dlp` executable. The uv tool directories are overridden only for the image-build step, leaving runtime uv tool installs on the normal user-writable path. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
+
+The current Hermes upstream image uses Node 26. CodeGraph 1.6.0 still declares Node `>=20 <25`; this image intentionally keeps CodeGraph without adding a second Node 24 runtime and exercises `codegraph --help` in the Docker smoke test. If Node 26 causes a real failure, the preferred path is to update CodeGraph when upstream support lands rather than permanently carry another Node runtime.
+
+The current Dockerfile no longer uses npm to install these custom CLIs. Node.js/npm remain available as part of the upstream runtime. If Codex is present in the image, it is supplied by the upstream base image rather than reinstalled by this wrapper.
 
 This repository does not duplicate Feishu/Lark dependency versions. Each build reads `project.optional-dependencies.feishu` from the upstream `/opt/hermes/pyproject.toml` and installs those exact requirements into the Hermes venv. The image smoke test fails closed if the extra disappears, omits `lark-oapi` / `qrcode`, or no longer satisfies the adapter's `extra_ua_tags` contract.
 
-The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, Python, Node.js, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
+Upstream now also supports durable lazy installation of optional dependencies under `/opt/data/lazy-packages`. This wrapper still bakes Feishu because it is used as a long-lived gateway channel here: first connection should not depend on PyPI availability at that moment, while the package versions continue to come directly from upstream metadata.
+
+The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, Python, Node.js 26, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
 
 ### Build and verify
 
