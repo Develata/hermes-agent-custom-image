@@ -65,9 +65,11 @@ RUN set -eux; \
 # Install Bun from the pinned official release asset and verify its SHA-256.
 # Avoid executing a mutable remote install script during the image build.
 # Global Bun packages and their command shims live under /usr/local.
-ENV BUN_INSTALL=/usr/local/bun \
-    BUN_INSTALL_BIN=/usr/local/bin \
-    BUN_INSTALL_GLOBAL_DIR=/usr/local/bun/install/global
+# Runtime Bun global installs belong on the durable Hermes data volume. The
+# build-time preinstalled CLIs override these variables inline to /usr/local.
+ENV BUN_INSTALL=/opt/data/.bun \
+    BUN_INSTALL_BIN=/opt/data/.local/bin \
+    BUN_INSTALL_GLOBAL_DIR=/opt/data/.bun/install/global
 
 ARG BUN_VERSION=1.4.2
 ARG BUN_X86_64_SHA256=36368faef7527875d5ffa52e53cd48021741f2a83eb6208a8dd64068d422a913
@@ -236,7 +238,11 @@ ARG OPENCLI_VERSION=1.8.8
 # user configuration such as /root/.opencli into the image.
 RUN set -eux; \
     install -d -m 0700 /tmp/bun-global-home; \
-    HOME=/tmp/bun-global-home bun add -g --trust \
+    HOME=/tmp/bun-global-home \
+    BUN_INSTALL=/usr/local/bun \
+    BUN_INSTALL_BIN=/usr/local/bin \
+    BUN_INSTALL_GLOBAL_DIR=/usr/local/bun/install/global \
+    bun add -g --trust \
         "@colbymchenry/codegraph@${CODEGRAPH_VERSION}" \
         "@tencent-qqmail/agently-cli@${AGENTLY_CLI_VERSION}" \
         "@jackwener/opencli@${OPENCLI_VERSION}"; \
@@ -244,19 +250,18 @@ RUN set -eux; \
     command -v agently-cli; \
     command -v opencli; \
     rm -rf /tmp/bun-global-home; \
-    bun pm cache rm
+    BUN_INSTALL=/usr/local/bun bun pm cache rm
 
 # Agent Reach is a Python CLI, so keep it isolated from Hermes' own venv with
 # uv tool. Pin the exact upstream revision rather than installing the unrelated
 # PyPI project with the same name. Expose yt-dlp from the same tool environment
 # because Agent Reach treats it as a core upstream CLI.
-ENV UV_TOOL_DIR=/usr/local/share/uv/tools \
-    UV_TOOL_BIN_DIR=/usr/local/bin
-
 ARG AGENT_REACH_REV=a19a171fa980a0785849596492e0af4db800c82f
 
 RUN set -eux; \
     command -v opencli; \
+    UV_TOOL_DIR=/usr/local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/usr/local/bin \
     uv tool install --python /usr/bin/python3 \
         --with-executables-from 'yt-dlp[default]' \
         "git+https://github.com/Panniantong/Agent-Reach.git@${AGENT_REACH_REV}"; \
