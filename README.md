@@ -223,6 +223,7 @@ Bun 1.4.2
 build-essential / pkg-config / libssl-dev
 codegraph
 agently-cli
+opencli
 Feishu/Lark gateway Python deps: lark-oapi, qrcode
 ```
 
