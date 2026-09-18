@@ -4,11 +4,6 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - Dockerfile
-      - "scripts/**"
-      - ".github/workflows/docker-pr.yml"
-      - ".github/workflows/docker-build.yml"
 
 concurrency:
   group: docker-pr-${{ github.event.pull_request.number }}
