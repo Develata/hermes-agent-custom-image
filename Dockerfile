@@ -26,6 +26,7 @@ USER root
 #   project's lean-toolchain selection; Mathlib stays project-local
 # - Tectonic: pinned single-binary TeX/LaTeX compiler; support files are
 #   downloaded and cached on demand instead of baking in a full TeX Live tree
+# - Bun: pinned JavaScript runtime/package manager for custom global CLI installs
 # - @colbymchenry/codegraph: CodeGraph MCP/CLI
 #
 # Deliberately not included:
@@ -59,6 +60,22 @@ RUN set -eux; \
     git lfs version; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
+
+# Install Bun system-wide so both root during image build and the runtime
+# hermes user can use it. Keep global CLI bins in /usr/local/bin rather than
+# root's home directory.
+ENV BUN_INSTALL=/usr/local/bun \
+    BUN_INSTALL_BIN=/usr/local/bin \
+    BUN_INSTALL_GLOBAL_DIR=/usr/local/bun/install/global \
+    PATH=/usr/local/bun/bin:$PATH
+
+ARG BUN_VERSION=1.4.2
+
+RUN set -eux; \
+    curl -fsSL https://bun.com/install -o /tmp/install-bun.sh; \
+    bash /tmp/install-bun.sh "bun-v${BUN_VERSION}"; \
+    bun --version | grep -Fx "${BUN_VERSION}"; \
+    rm -f /tmp/install-bun.sh
 
 ARG DOCKER_COMPOSE_VERSION=v5.3.0
 
@@ -195,9 +212,11 @@ RUN set -eux; \
     rm -f /tmp/hermes-feishu-requirements.txt
 
 RUN set -eux; \
-    npm install -g \
+    bun add --global \
         @colbymchenry/codegraph \
         @tencent-qqmail/agently-cli; \
-    npm cache clean --force
+    command -v codegraph; \
+    command -v agently-cli; \
+    bun pm cache rm
 
 COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke
