@@ -4,8 +4,34 @@ FROM ${UPSTREAM_IMAGE}
 
 USER root
 
+# Own uv/uvx explicitly: upstream runtime images may omit build-time tools.
+# Latest stable at update time; pin both the official release and asset hashes.
+# https://github.com/astral-sh/uv/releases/tag/0.13.0
+ARG UV_VERSION=0.13.0
+ARG UV_X86_64_SHA256=b0828fc4cdc47d65951e94b5f0a15a5364420e8dcd88723f3b21e7a2eb30bbc3
+ARG UV_AARCH64_SHA256=281ca6cf43f4e26e35474839ad4861be86de42af2682f74134460f5b2071b96d
+
+RUN set -eux; \
+    case "$(uname -m)" in \
+        x86_64) uv_target=x86_64-unknown-linux-musl; uv_sha256="${UV_X86_64_SHA256}" ;; \
+        aarch64) uv_target=aarch64-unknown-linux-musl; uv_sha256="${UV_AARCH64_SHA256}" ;; \
+        *) echo "unsupported uv platform: $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    uv_tmp="$(mktemp -d)"; \
+    curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-all-errors \
+        "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-${uv_target}.tar.gz" \
+        -o "${uv_tmp}/uv.tar.gz"; \
+    printf '%s  %s\n' "${uv_sha256}" "${uv_tmp}/uv.tar.gz" | sha256sum -c -; \
+    tar -xzf "${uv_tmp}/uv.tar.gz" -C "${uv_tmp}" \
+        "uv-${uv_target}/uv" "uv-${uv_target}/uvx"; \
+    install -m 0755 "${uv_tmp}/uv-${uv_target}/uv" /usr/local/bin/uv; \
+    install -m 0755 "${uv_tmp}/uv-${uv_target}/uvx" /usr/local/bin/uvx; \
+    test "$(uv --version | cut -d ' ' -f 2)" = "${UV_VERSION}"; \
+    test "$(uvx --version | cut -d ' ' -f 2)" = "${UV_VERSION}"; \
+    rm -rf "${uv_tmp}"
+
 # Upstream Hermes image already includes ca-certificates, curl, python3,
-# git, openssh-client, docker-cli, node 26, npm, uv, ripgrep, ffmpeg,
+# git, openssh-client, docker-cli, node 26, npm, ripgrep, ffmpeg,
 # gcc/python3-dev/libffi-dev, procps, and xz-utils. Keep this layer only
 # for Develata-specific tools that are not part of the base image.
 #

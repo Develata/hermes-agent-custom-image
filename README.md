@@ -54,6 +54,7 @@ Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
 Bun 1.4.2
+uv / uvx 0.13.0
 pkg-config / libssl-dev
 codegraph 1.6.0
 agently-cli 1.0.18
@@ -85,7 +86,7 @@ bun add -g --trust \
   @jackwener/opencli@1.8.7
 ```
 
-构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。预装 Bun CLI 固定在 `/usr/local`；运行时若 Hermes 自己执行 `bun add -g`，则写入持久化的 `/opt/data/.bun`，命令链接进入已经在 PATH 中的 `/opt/data/.local/bin`。OpenCLI 安装完成后，再使用上游已有的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，安装时同时采用该 commit 自带的 `constraints.txt` 收紧依赖版本，并额外暴露同一环境里的 `yt-dlp` executable。构建时只临时把 uv tool 目录指向 `/usr/local`，不改变运行时 uv 的用户级默认目录。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
+构建时为这些 lifecycle scripts 使用一次性的临时 `HOME`，避免把 `/root/.opencli` 等 root 用户配置烘入镜像。预装 Bun CLI 固定在 `/usr/local`；运行时若 Hermes 自己执行 `bun add -g`，则写入持久化的 `/opt/data/.bun`，命令链接进入已经在 PATH 中的 `/opt/data/.local/bin`。OpenCLI 安装完成后，再使用本镜像显式提供的 `uv` 通过独立 tool environment 安装 Agent Reach；Agent Reach 固定到一个明确的 upstream commit，安装时同时采用该 commit 自带的 `constraints.txt` 收紧依赖版本，并额外暴露同一环境里的 `yt-dlp` executable。构建时只临时把 uv tool 目录指向 `/usr/local`，不改变运行时 uv 的用户级默认目录。镜像只预装 Agent Reach CLI，不在构建期间运行 `agent-reach install --system`，因此不会自动改写运行时配置或批量安装渠道依赖。
 
 当前 Hermes 上游使用 Node 26。CodeGraph 1.6.0 的 package metadata 仍声明 Node `>=20 <25`；本镜像按使用需求暂时保留 CodeGraph，不额外安装 Node 24，并通过 Docker smoke test 实际执行 `codegraph --help`。若未来 Node 26 造成真实运行故障，应优先等待/升级 CodeGraph，而不是在基础镜像长期维护第二套 Node。
 
@@ -96,6 +97,17 @@ Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `
 上游现在也支持把 Feishu 等可选依赖按需安装到 `/opt/data/lazy-packages`。这里仍保留构建时预装 Feishu，原因是该实例把 Feishu 作为长期 gateway 渠道：这样首次连接不依赖当时的 PyPI 可用性；其版本仍完全跟随上游声明。
 
 当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js 26、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
+
+### uv / uvx provenance
+
+uv and uvx are explicitly provided by this custom layer, not assumed to exist in the upstream runtime. Version **0.13.0** was the latest stable release when verified on 2026-10-10. Both executables come from the same [official Astral release](https://github.com/astral-sh/uv/releases/tag/0.13.0), with pinned Linux musl archive hashes:
+
+- x86_64: `b0828fc4cdc47d65951e94b5f0a15a5364420e8dcd88723f3b21e7a2eb30bbc3`
+- aarch64: `281ca6cf43f4e26e35474839ad4861be86de42af2682f74134460f5b2071b96d`
+
+Downloads use HTTPS; SHA-256 must match before extraction. Install both binaries into `/usr/local/bin` before any `uv pip` / `uv tool` step, and check both versions during build and image smoke. No mutable remote installer is executed. Future stable updates must change the version, both hashes, and smoke expectations together; daily rebuilds do not silently follow a moving `latest` binary.
+
+这里固定的是核验时的最新稳定版，不是构建时动态追随 `latest`。下载来源为 Astral 官方 Release，两个架构的压缩包均须通过固定 SHA-256 校验后才安装；`uv` 和 `uvx` 来自同一版本。升级时同步更新版本、哈希与 smoke 检查。
 
 ### 本地构建与验证
 
@@ -225,6 +237,7 @@ Rust stable toolchain + rustfmt + clippy
 Elan 4.2.3 + Lean 4.32.0 + Lake
 Tectonic 0.16.9
 Bun 1.4.2
+uv / uvx 0.13.0
 pkg-config / libssl-dev
 codegraph 1.6.0
 agently-cli 1.0.18
@@ -256,7 +269,7 @@ bun add -g --trust \
   @jackwener/opencli@1.8.7
 ```
 
-Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. Preinstalled Bun CLIs stay under `/usr/local`; runtime `bun add -g` operations by Hermes write to the durable `/opt/data/.bun` tree and link commands into `/opt/data/.local/bin`, which is already on the upstream PATH. After OpenCLI is present, Agent Reach is installed with the upstream `uv` into an isolated tool environment, pinned to an exact upstream commit and constrained by that commit's tested `constraints.txt`; the same environment also exposes the `yt-dlp` executable. The uv tool directories are overridden only for the image-build step, leaving runtime uv tool installs on the normal user-writable path. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
+Lifecycle scripts run with a throwaway build-time `HOME` so root-user configuration such as `/root/.opencli` is not baked into the image. Preinstalled Bun CLIs stay under `/usr/local`; runtime `bun add -g` operations by Hermes write to the durable `/opt/data/.bun` tree and link commands into `/opt/data/.local/bin`, which is already on the upstream PATH. After OpenCLI is present, Agent Reach is installed with this layer's explicitly provided `uv` into an isolated tool environment, pinned to an exact upstream commit and constrained by that commit's tested `constraints.txt`; the same environment also exposes the `yt-dlp` executable. The uv tool directories are overridden only for the image-build step, leaving runtime uv tool installs on the normal user-writable path. The image installs only the Agent Reach CLI and does not run `agent-reach install --system` during the build, so it does not perform broad runtime configuration or channel installation.
 
 The current Hermes upstream image uses Node 26. CodeGraph 1.6.0 still declares Node `>=20 <25`; this image intentionally keeps CodeGraph without adding a second Node 24 runtime and exercises `codegraph --help` in the Docker smoke test. If Node 26 causes a real failure, the preferred path is to update CodeGraph when upstream support lands rather than permanently carry another Node runtime.
 

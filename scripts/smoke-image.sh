@@ -1,9 +1,14 @@
 #!/bin/sh
 set -eu
 
-for command_name in gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic bun codegraph agently-cli opencli agent-reach yt-dlp; do
+for command_name in uv uvx gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic bun codegraph agently-cli opencli agent-reach yt-dlp; do
     command -v "${command_name}" >/dev/null
 done
+
+test "$(uv --version | cut -d ' ' -f 2)" = '0.13.0'
+test "$(uvx --version | cut -d ' ' -f 2)" = '0.13.0'
+uv pip --help >/dev/null
+uv tool --help >/dev/null
 
 git lfs version >/dev/null
 test "$(git config --system --get filter.lfs.required)" = "true"
