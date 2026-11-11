@@ -4,14 +4,17 @@ FROM ${UPSTREAM_IMAGE}
 
 USER root
 
-# Work around upstream #152519 without modifying Hermes source or PM facts.
+# Work around upstream #152519 without patching Hermes source or hand-editing PM facts.
 # v0.23.1 omits pnpm from runtime but requires it for PM activation/extra sync.
 # Reuse the upstream lock, verified downloader, and native PM publication path.
 # PM atomically replaces facts with mode 0600; restore public tool metadata
 # readability for the non-root runtime (never chmod user/credential state).
-RUN cd /opt/hermes && python3 -c \
-    'from pathlib import Path; from pm import ensure, installed_package, paths; ensure("pnpm", explicit=True); p = Path("/usr/local/bin/pnpm"); p.unlink(missing_ok=True); p.symlink_to(installed_package("pnpm").binary); paths.facts_path().chmod(0o644)' && \
-    pnpm --version
+# Pin both roots for this build-only process: the sealed runtime otherwise
+# publishes tools under HERMES_HOME=/opt/data, which is a masked VOLUME.
+RUN cd /opt/hermes && HERMES_HOME=/opt/hermes HERMES_RUNTIME_DIR=/opt/hermes/tools python3 -c \
+    'from pathlib import Path; from pm import ensure, installed_package, paths; root = Path("/opt/hermes/tools"); assert paths.store_root() == paths.writable_store_root() == root; ensure("pnpm", explicit=True); binary = installed_package("pnpm").binary; assert binary.resolve().is_relative_to(root); p = Path("/usr/local/bin/pnpm"); p.unlink(missing_ok=True); p.symlink_to(binary); paths.facts_path().chmod(0o644)' && \
+    pnpm --version && \
+    rm -rf /opt/hermes/cache/partials
 
 # Own uv/uvx explicitly: upstream runtime images may omit build-time tools.
 # Latest stable at update time; pin both the official release and asset hashes.

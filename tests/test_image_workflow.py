@@ -143,6 +143,14 @@ class PublicationTests(unittest.TestCase):
         self.registry.alias_digest = 'sha256:' + 'e' * 64
         with self.assertRaisesRegex(ValueError,'remote digest mismatch'): self.publisher.publish()
         self.assertNotIn('latest', self.registry.aliases())
+        self.assertEqual(self.publisher.receipt['pushed_aliases'], ['2026-11-11'])
+        self.assertEqual(self.publisher.receipt['verified_aliases'], [])
+
+    def test_latest_push_success_read_failure_remains_visible(self):
+        self.registry.fail = lambda a: a[:4] == ('docker','buildx','imagetools','inspect') and a[4] == self.registry.env['CUSTOM_IMAGE']+':latest'
+        with self.assertRaises(subprocess.CalledProcessError): self.publisher.publish()
+        self.assertEqual(self.publisher.receipt['pushed_aliases'][-1], 'latest')
+        self.assertNotIn('latest', self.publisher.receipt['verified_aliases'])
 
     def test_invalid_registry_digest_aborts(self):
         self.registry.digest = 'not-a-digest'
@@ -181,6 +189,14 @@ class PublicationTests(unittest.TestCase):
 
 
 class HealthTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(health.os, 'geteuid', return_value=10000))
+
+    def test_root_cannot_mask_non_root_runtime_failure(self):
+        with patch.object(health.os,'geteuid',return_value=0), patch.object(health.subprocess,'run') as run:
+            self.assertEqual(health.main(),1)
+            run.assert_not_called()
+
     def native(self, problem=None):
         module=types.ModuleType('hermes_cli.venv_sync')
         setattr(module, 'check_runtime', lambda root: problem)
@@ -230,6 +246,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn('ensure("pnpm", explicit=True)',source)
         self.assertIn('installed_package("pnpm").binary',source)
         self.assertIn('paths.facts_path().chmod(0o644)',source)
+        self.assertIn('HERMES_HOME=/opt/hermes HERMES_RUNTIME_DIR=/opt/hermes/tools',source)
+        self.assertIn('paths.store_root() == paths.writable_store_root() == root',source)
+        self.assertIn('binary.resolve().is_relative_to(root)',source)
         self.assertIn('scripts/runtime-health.py /usr/local/bin/hermes-custom-runtime-health',source)
         self.assertNotIn('npm install -g pnpm',source)
 

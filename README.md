@@ -100,7 +100,7 @@ Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `
 
 ### 原生 PM 健康
 
-上游 v0.23.1 存在已报告的 [#152519](https://github.com/NousResearch/hermes-agent/issues/152519)：runtime 未携带 pnpm，但 PM activation 仍将其视为必需包，甚至会阻塞 Python extra 的安装。本包装层通过上游原生 `pm.ensure("pnpm", explicit=True)` 安装上游 lock 中的精确版本和校验过的 artifacts，不改 Hermes 源码、lock 或 facts，不另行维护 npm/pnpm 版本。
+上游 v0.23.1 存在已报告的 [#152519](https://github.com/NousResearch/hermes-agent/issues/152519)：runtime 未携带 pnpm，但 PM activation 仍将其视为必需包，甚至会阻塞 Python extra 的安装。本包装层通过上游原生 `pm.ensure("pnpm", explicit=True)` 安装上游 lock 中的精确版本和校验过的 artifacts，不改 Hermes 源码或 lock，不手工改写 facts 内容，不另行维护 npm/pnpm 版本。构建进程同时将 `HERMES_HOME` 和 `HERMES_RUNTIME_DIR` 固定到 `/opt/hermes` 的镜像目录，并断言 writable store 和 pnpm 实际路径都不落在 `/opt/data` volume；检查工具要求实际非 root 执行。
 
 `hermes-custom-runtime-health` 同时检查原生 PM doctor（含 realized bytes 校验）和 passive startup verdict；任一失败即拒绝验收，不忽略 pnpm 或其他必需包错误。完整 image smoke 和远端回读后的健康检查均调用它。当前运行容器不会因仓库修改自动获得此修复，必须发布新镜像并重建后再验收。
 
@@ -293,7 +293,7 @@ The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, 
 
 ### Native PM health
 
-Upstream v0.23.1 has [#152519](https://github.com/NousResearch/hermes-agent/issues/152519): pnpm is absent from runtime although activation requires it, which can also block Python-extra sync. This wrapper stages it through native `pm.ensure("pnpm", explicit=True)` using the upstream lock and verified artifacts, without patching Hermes source, lock or facts by hand. `hermes-custom-runtime-health` requires both native PM doctor and passive startup health to pass. The full smoke and downloaded-candidate health checks invoke it. Existing containers require a newly published image and recreate before the fix can be claimed active.
+Upstream v0.23.1 has [#152519](https://github.com/NousResearch/hermes-agent/issues/152519): pnpm is absent from runtime although activation requires it, which can also block Python-extra sync. This wrapper stages it through native `pm.ensure("pnpm", explicit=True)` using the upstream lock and verified artifacts, without patching Hermes source, lock or facts by hand. Build-only home/store overrides and path assertions keep the tool out of the masked `/opt/data` volume, including with a sealed base. The health check rejects root execution rather than assuming the entrypoint dropped privileges. `hermes-custom-runtime-health` requires both native PM doctor and passive startup health to pass. The full smoke and downloaded-candidate health checks invoke it. Existing containers require a newly published image and recreate before the fix can be claimed active.
 
 ### Build and verify
 

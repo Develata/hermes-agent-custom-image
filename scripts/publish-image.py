@@ -47,7 +47,8 @@ class Publisher:
             'org.opencontainers.image.base.digest': self.base,
         }
         self.receipt = {'status': 'started', 'candidate': f'{self.image}:{self.candidate}',
-                        'source': self.sha, 'base': self.base, 'verified_aliases': []}
+                        'source': self.sha, 'base': self.base,
+                        'pushed_aliases': [], 'verified_aliases': []}
 
     def remote_digest(self, ref: str) -> str:
         digest = self.run('docker', 'buildx', 'imagetools', 'inspect', ref,
@@ -90,6 +91,7 @@ class Publisher:
             alias = f'{self.image}:{tag}'
             self.run('docker', 'tag', ref, alias)
             self.run('docker', 'push', alias)
+            self.receipt['pushed_aliases'].append(tag)
             if self.remote_digest(alias) != digest:
                 raise ValueError(f'remote digest mismatch after promoting {tag}')
             self.receipt['verified_aliases'].append(tag)

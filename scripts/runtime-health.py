@@ -1,11 +1,15 @@
 #!/opt/hermes/.venv/bin/python
 """Fail closed on native PM byte verification AND passive startup drift."""
 from pathlib import Path
+import os
 import subprocess
 import sys
 
 
 def main() -> int:
+    if os.geteuid() == 0:
+        print('Native runtime health must run after entrypoint privilege drop', file=sys.stderr)
+        return 1
     root = Path('/opt/hermes')
     # Invoke PM directly: do not start the application CLI/home migrations.
     doctor = subprocess.run([sys.executable, '-m', 'pm.cli', 'doctor'], cwd=root)
