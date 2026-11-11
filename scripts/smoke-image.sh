@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+# Check the native installation contract before unrelated tool smoke steps.
+hermes-custom-runtime-health
+pnpm --version >/dev/null
+
 for command_name in uv uvx gh jq rclone sshpass git-lfs docker cargo elan lean lake tectonic bun codegraph agently-cli opencli agent-reach yt-dlp; do
     command -v "${command_name}" >/dev/null
 done

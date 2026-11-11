@@ -12,8 +12,15 @@ env:
   IMAGE_NAME: hermes-agent-custom-image
   UPSTREAM_IMAGE: nousresearch/hermes-agent:latest
 
+# Serialize all mutable-tag writers. Never cancel a publication mid-push;
+# the publisher separately rejects obsolete source/base candidates (not FIFO).
+concurrency:
+  group: docker-publish-main
+  cancel-in-progress: false
+
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     permissions:
@@ -25,6 +32,9 @@ jobs:
         uses: actions/checkout@v6
         with:
           persist-credentials: false
+
+      - name: Test workflow contracts
+        run: python3 -m unittest discover -s tests -v
 
       - name: Log in to GitHub Container Registry
         id: ghcr-login
@@ -77,14 +87,14 @@ jobs:
             fi
           done
 
-          if [ -z "${upstream_digest}" ]; then
-            echo "::error::Unable to resolve upstream image digest after 5 attempts"
+          if [[ ! "${upstream_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Unable to resolve a valid upstream image digest after 5 attempts"
             exit 1
           fi
 
           digest_hex="${upstream_digest#sha256:}"
           upstream_tag="upstream-${digest_hex}"
-          immutable_tag="build-${CUSTOM_REVISION}-upstream-${digest_hex:0:12}"
+          immutable_tag="build-${CUSTOM_REVISION}-upstream-${digest_hex:0:12}-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           custom_image="ghcr.io/${IMAGE_OWNER}/${IMAGE_NAME}"
 
           echo "digest=${upstream_digest}" >> "$GITHUB_OUTPUT"
@@ -98,9 +108,14 @@ jobs:
             exit 0
           fi
 
-          if docker manifest inspect "${custom_image}:${upstream_tag}" >/dev/null 2>&1; then
+          # Check latest's source AND base, not merely an already-pushed base
+          # alias: a previous run can fail before latest promotion.
+          if latest_labels="$(docker buildx imagetools inspect "${custom_image}:latest" --format '{{json .Image.Config.Labels}}')" && \
+             jq -e --arg revision "${GITHUB_SHA}" --arg digest "${upstream_digest}" \
+               '.["org.opencontainers.image.revision"] == $revision and .["org.opencontainers.image.base.digest"] == $digest' \
+               <<< "${latest_labels}" >/dev/null; then
             echo "should_build=false" >> "$GITHUB_OUTPUT"
-            echo "reason=upstream digest already built" >> "$GITHUB_OUTPUT"
+            echo "reason=latest already matches source and upstream digest" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             echo "reason=new upstream digest" >> "$GITHUB_OUTPUT"
@@ -128,9 +143,6 @@ jobs:
             --label org.opencontainers.image.created="${IMAGE_CREATED}" \
             --label org.opencontainers.image.base.name="${UPSTREAM_IMAGE}" \
             --label org.opencontainers.image.base.digest="${{ steps.upstream.outputs.digest }}" \
-            -t "${{ steps.upstream.outputs.custom_image }}:latest" \
-            -t "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}" \
-            -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}" \
             -t "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}" \
             .
 
@@ -138,28 +150,31 @@ jobs:
         if: steps.upstream.outputs.should_build == 'true'
         shell: bash
         run: |
-          docker run --rm "${{ steps.upstream.outputs.custom_image }}:latest" \
+          docker run --rm "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}" \
             sh -lc hermes-custom-image-smoke
 
       - name: Verify image provenance labels
         if: steps.upstream.outputs.should_build == 'true'
         shell: bash
         run: |
-          image="${{ steps.upstream.outputs.custom_image }}:latest"
+          image="${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}"
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "${image}")" = "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${image}")" = "${GITHUB_SHA}"
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.created" }}' "${image}")" = "${IMAGE_CREATED}"
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.name" }}' "${image}")" = "${UPSTREAM_IMAGE}"
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.base.digest" }}' "${image}")" = "${{ steps.upstream.outputs.digest }}"
 
-      - name: Push Docker image
+      - name: Publish candidate and promote verified aliases
         if: steps.upstream.outputs.should_build == 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUSTOM_IMAGE: ${{ steps.upstream.outputs.custom_image }}
+          CANDIDATE_TAG: ${{ steps.upstream.outputs.immutable_tag }}
+          UPSTREAM_DIGEST: ${{ steps.upstream.outputs.digest }}
+          PUBLICATION_RECEIPT: ${{ runner.temp }}/image-publication.json
         run: |
-          docker push "${{ steps.upstream.outputs.custom_image }}:latest"
-          docker push "${{ steps.upstream.outputs.custom_image }}:${IMAGE_DATE}"
-          docker push "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.tag }}"
-          docker push "${{ steps.upstream.outputs.custom_image }}:${{ steps.upstream.outputs.immutable_tag }}"
+          python3 scripts/publish-image.py
 
       - name: Log out from GitHub Container Registry
         if: always()

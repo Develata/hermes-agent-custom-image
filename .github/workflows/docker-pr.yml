@@ -24,6 +24,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test workflow contracts
+        run: python3 -m unittest discover -s tests -v
+
       - name: Resolve upstream image digest
         id: upstream
         shell: bash
@@ -37,8 +40,8 @@ jobs:
             [ "${attempt}" -eq 5 ] || sleep $((attempt * 15))
           done
 
-          if [ -z "${upstream_digest}" ]; then
-            echo "::error::Unable to resolve upstream image digest"
+          if [[ ! "${upstream_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Unable to resolve a valid upstream image digest"
             exit 1
           fi
 

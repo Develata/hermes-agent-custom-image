@@ -22,7 +22,7 @@
 ghcr.io/develata/hermes-agent-custom-image:latest
 ghcr.io/develata/hermes-agent-custom-image:YYYY-MM-DD
 ghcr.io/develata/hermes-agent-custom-image:upstream-<sha256>
-ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>
+ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>-run-<run-id>-<attempt>
 ```
 
 基础镜像：
@@ -98,6 +98,12 @@ Feishu/Lark 依赖不在本仓库重复写版本号。构建时会读取上游 `
 
 当前上游 Hermes Agent 镜像已经包含 `git`、`curl`、`wget`、`ca-certificates`、Python、Node.js 26、npm、ripgrep、ffmpeg、Docker CLI、OpenSSH client 和 `procps`，本仓库不会重复把这些声明为自定义新增工具。
 
+### 原生 PM 健康
+
+上游 v0.23.1 存在已报告的 [#152519](https://github.com/NousResearch/hermes-agent/issues/152519)：runtime 未携带 pnpm，但 PM activation 仍将其视为必需包，甚至会阻塞 Python extra 的安装。本包装层通过上游原生 `pm.ensure("pnpm", explicit=True)` 安装上游 lock 中的精确版本和校验过的 artifacts，不改 Hermes 源码或 lock，不手工改写 facts 内容，不另行维护 npm/pnpm 版本。构建进程同时将 `HERMES_HOME` 和 `HERMES_RUNTIME_DIR` 固定到 `/opt/hermes` 的镜像目录，并断言 writable store 和 pnpm 实际路径都不落在 `/opt/data` volume；检查工具要求实际非 root 执行。
+
+`hermes-custom-runtime-health` 同时检查原生 PM doctor（含 realized bytes 校验）和 passive startup verdict；任一失败即拒绝验收，不忽略 pnpm 或其他必需包错误。完整 image smoke 和远端回读后的健康检查均调用它。当前运行容器不会因仓库修改自动获得此修复，必须发布新镜像并重建后再验收。
+
 ### uv / uvx provenance
 
 uv and uvx are explicitly provided by this custom layer, not assumed to exist in the upstream runtime. Version **0.13.0** was the latest stable release when verified on 2026-10-10. Both executables come from the same [official Astral release](https://github.com/astral-sh/uv/releases/tag/0.13.0), with pinned Linux musl archive hashes:
@@ -160,7 +166,11 @@ GitHub Actions 会在以下场景检查或构建镜像：
 - 手动 `workflow_dispatch`
 - 每天 UTC 03:00 检查上游镜像 digest
 
-定时任务只在上游 `nousresearch/hermes-agent:latest` digest 变化时构建并推送。push 和手动触发会直接构建。实际构建把 `FROM` 解析为 `tag@digest`，并写入 OCI `source`、`revision`、`created`、`base.name`、`base.digest` labels；因此 `latest` 可追溯到精确 custom commit 与 upstream manifest。
+定时任务只有在 `latest` 的 custom source SHA 与 upstream digest 均匹配时才跳过；push 和手动触发直接构建。实际构建固定 `FROM=tag@digest` 并记录 OCI provenance。发布任务串行、不取消正在发布的任务；通过发布前的 source/base 新鲜度检查拒绝过时候选，不依赖排队 FIFO。
+
+本地 smoke 后先推送含 run ID/attempt 的唯一 candidate，再解析 GHCR digest、按 digest 重新下载、比对本地 config ID 与全部 provenance labels，并通过正常降权 entrypoint 在无网络环境运行原生 PM health。之后才更新日期/upstream 别名，`latest` 最后更新；每个别名均远端回读验证 digest。运行摘要记录发布成功、候选过时或失败及已验证的别名。多 tag 更新并非原子事务，新鲜度检查只证明检查时刻。
+
+发布和只读 PR 验证均运行 `python3 -m unittest discover -s tests -v`；这是离线命令边界回归，不能替代真实 Docker build/smoke 和 GHCR 回读。
 
 每次实际构建会同时推送：
 
@@ -168,7 +178,7 @@ GitHub Actions 会在以下场景检查或构建镜像：
 latest
 YYYY-MM-DD
 upstream-<sha256>
-build-<custom-sha>-upstream-<base-sha>
+build-<custom-sha>-upstream-<base-sha>-run-<run-id>-<attempt>
 ```
 
 ### 默认用户
@@ -205,7 +215,7 @@ This repository does not fork, vendor, or modify the upstream Hermes Agent sourc
 ghcr.io/develata/hermes-agent-custom-image:latest
 ghcr.io/develata/hermes-agent-custom-image:YYYY-MM-DD
 ghcr.io/develata/hermes-agent-custom-image:upstream-<sha256>
-ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>
+ghcr.io/develata/hermes-agent-custom-image:build-<custom-sha>-upstream-<base-sha>-run-<run-id>-<attempt>
 ```
 
 Base image:
@@ -281,6 +291,10 @@ Upstream now also supports durable lazy installation of optional dependencies un
 
 The current upstream Hermes Agent image already includes `git`, `curl`, `wget`, `ca-certificates`, Python, Node.js 26, npm, ripgrep, ffmpeg, Docker CLI, OpenSSH client, and `procps`; this repository does not claim those as custom additions.
 
+### Native PM health
+
+Upstream v0.23.1 has [#152519](https://github.com/NousResearch/hermes-agent/issues/152519): pnpm is absent from runtime although activation requires it, which can also block Python-extra sync. This wrapper stages it through native `pm.ensure("pnpm", explicit=True)` using the upstream lock and verified artifacts, without patching Hermes source, lock or facts by hand. Build-only home/store overrides and path assertions keep the tool out of the masked `/opt/data` volume, including with a sealed base. The health check rejects root execution rather than assuming the entrypoint dropped privileges. `hermes-custom-runtime-health` requires both native PM doctor and passive startup health to pass. The full smoke and downloaded-candidate health checks invoke it. Existing containers require a newly published image and recreate before the fix can be claimed active.
+
 ### Build and verify
 
 ```bash
@@ -332,7 +346,11 @@ GitHub Actions checks or builds the image on:
 - manual `workflow_dispatch`
 - daily upstream digest check at 03:00 UTC
 
-Scheduled runs only build and push when the digest of `nousresearch/hermes-agent:latest` changes. Push and manual runs build directly. Each build resolves `FROM` as `tag@digest` and records OCI `source`, `revision`, `created`, `base.name`, and `base.digest` labels, so `latest` remains traceable to an exact custom commit and upstream manifest.
+Scheduled runs skip only when `latest` matches both the current custom source SHA and upstream digest. Push/manual runs build directly. Each build pins `FROM` to `tag@digest` and records OCI provenance labels. Publication is serialized without cancelling an in-flight publisher; source/base freshness checks, not FIFO assumptions, reject superseded candidates.
+
+After local smoke, the unique run/attempt candidate is pushed first. CI resolves its GHCR digest, downloads by digest, matches the local config ID and all provenance labels, and runs native PM health with the normal privilege-dropping entrypoint and no egress. Only then are date/upstream aliases promoted, with `latest` last; each alias is read back and must match the candidate digest. The run summary records success, supersession, or failure and which aliases were verified. Multiple tag writes are not atomic; checks are point-in-time, not a registry transaction.
+
+Offline command-boundary regressions run in both publication and read-only PR validation: `python3 -m unittest discover -s tests -v`. They do not substitute for the real Docker build/smoke and GHCR read-back.
 
 Each actual build pushes:
 
@@ -340,7 +358,7 @@ Each actual build pushes:
 latest
 YYYY-MM-DD
 upstream-<sha256>
-build-<custom-sha>-upstream-<base-sha>
+build-<custom-sha>-upstream-<base-sha>-run-<run-id>-<attempt>
 ```
 
 ### Default user
