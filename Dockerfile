@@ -4,6 +4,15 @@ FROM ${UPSTREAM_IMAGE}
 
 USER root
 
+# Work around upstream #152519 without modifying Hermes source or PM facts.
+# v0.23.1 omits pnpm from runtime but requires it for PM activation/extra sync.
+# Reuse the upstream lock, verified downloader, and native PM publication path.
+# PM atomically replaces facts with mode 0600; restore public tool metadata
+# readability for the non-root runtime (never chmod user/credential state).
+RUN cd /opt/hermes && python3 -c \
+    'from pathlib import Path; from pm import ensure, installed_package, paths; ensure("pnpm", explicit=True); p = Path("/usr/local/bin/pnpm"); p.unlink(missing_ok=True); p.symlink_to(installed_package("pnpm").binary); paths.facts_path().chmod(0o644)' && \
+    pnpm --version
+
 # Own uv/uvx explicitly: upstream runtime images may omit build-time tools.
 # Latest stable at update time; pin both the official release and asset hashes.
 # https://github.com/astral-sh/uv/releases/tag/0.13.0
@@ -300,4 +309,5 @@ RUN set -eux; \
     command -v yt-dlp; \
     agent-reach --version
 
+COPY --chmod=0755 scripts/runtime-health.py /usr/local/bin/hermes-custom-runtime-health
 COPY --chmod=0755 scripts/smoke-image.sh /usr/local/bin/hermes-custom-image-smoke

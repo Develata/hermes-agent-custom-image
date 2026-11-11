@@ -24,6 +24,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Test workflow contracts
+        run: python3 -m unittest discover -s tests -v
+
       - name: Resolve upstream image digest
         id: upstream
         shell: bash
